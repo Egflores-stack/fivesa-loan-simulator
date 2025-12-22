@@ -223,6 +223,54 @@ app.post("/api/reports/amortization", authenticateToken, (req, res) => {
 
   const amortization = generateAmortizationTable(params);
   res.json({ amortization });
+const summaryData = {
+  kpis: {
+    disbursements: 18500000,
+    portfolio: 96250000,
+    delinquency: 3.8,
+    index: 1.42,
+  },
+  monthlyTotals: [
+    {
+      month: "Enero 2024",
+      disbursements: 2800000,
+      portfolio: 90500000,
+      delinquency: 3.5,
+      index: 1.3,
+    },
+    {
+      month: "Febrero 2024",
+      disbursements: 3100000,
+      portfolio: 91800000,
+      delinquency: 3.6,
+      index: 1.34,
+    },
+    {
+      month: "Marzo 2024",
+      disbursements: 3350000,
+      portfolio: 93250000,
+      delinquency: 3.7,
+      index: 1.38,
+    },
+    {
+      month: "Abril 2024",
+      disbursements: 3600000,
+      portfolio: 94700000,
+      delinquency: 3.9,
+      index: 1.4,
+    },
+    {
+      month: "Mayo 2024",
+      disbursements: 3650000,
+      portfolio: 96250000,
+      delinquency: 3.8,
+      index: 1.42,
+    },
+  ],
+};
+
+app.get("/api/summary", (_req, res) => {
+  return res.json(summaryData);
 });
 
 const port = Number(process.env.PORT || 3001);
