@@ -25,6 +25,41 @@ CREATE TABLE IF NOT EXISTS loan_requests (
   created_at timestamptz NOT NULL DEFAULT now()
 );
 
+CREATE TABLE IF NOT EXISTS loans (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  request_id uuid REFERENCES loan_requests(id) ON DELETE SET NULL,
+  credit_number integer UNIQUE NOT NULL,
+  currency text NOT NULL,
+  amount numeric NOT NULL,
+  term_months integer NOT NULL,
+  monthly_rate numeric NOT NULL,
+  payment_frequency text NOT NULL,
+  commission_type text NOT NULL,
+  commission_value numeric NOT NULL,
+  effective_date date NOT NULL,
+  first_payment_date date NOT NULL,
+  payment_days text,
+  status text NOT NULL DEFAULT 'Activo',
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS loan_installments (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  loan_id uuid NOT NULL REFERENCES loans(id) ON DELETE CASCADE,
+  installment_number integer NOT NULL,
+  due_date date NOT NULL,
+  principal numeric NOT NULL,
+  interest numeric NOT NULL,
+  commission numeric NOT NULL,
+  total_payment numeric NOT NULL,
+  balance numeric NOT NULL,
+  status text NOT NULL DEFAULT 'Pendiente',
+  paid_date date,
+  paid_amount numeric,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (loan_id, installment_number)
+);
+
 -- Example seed (password: "demo1234")
 -- INSERT INTO users (email, role, password_hash)
 -- VALUES (
