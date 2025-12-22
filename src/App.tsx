@@ -8,6 +8,7 @@ import NotFound from "./pages/NotFound";
 import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
 import Simulator from "./pages/Simulator";
+import Config from "./pages/Config";
 import { AuthProvider } from "./hooks/use-auth";
 import ProtectedRoute from "./components/ProtectedRoute";
 
@@ -36,6 +37,14 @@ const App = () => (
               element={
                 <ProtectedRoute>
                   <Simulator />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/config"
+              element={
+                <ProtectedRoute>
+                  <Config />
                 </ProtectedRoute>
               }
             />

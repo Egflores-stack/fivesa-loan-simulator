@@ -2,7 +2,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Calculator, LogOut, UserCircle2 } from "lucide-react";
+import { Calculator, LogOut, Settings, UserCircle2 } from "lucide-react";
 
 const Dashboard = () => {
   const { user, logout } = useAuth();
@@ -55,6 +55,25 @@ const Dashboard = () => {
           </CardContent>
         </Card>
 
+        {user?.role === "Administrador" ? (
+          <Card className="shadow-sm">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-xl">
+                <Settings className="h-5 w-5 text-primary" />
+                Configuración
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <p className="text-sm text-muted-foreground">
+                Administra usuarios, roles y parámetros de mora desde el panel
+                de configuración.
+              </p>
+              <Button asChild variant="outline">
+                <Link to="/config">Ir a configuración</Link>
+              </Button>
+            </CardContent>
+          </Card>
+        ) : (
         <Card className="border-dashed bg-card/60">
           <CardHeader>
             <CardTitle className="text-xl">Próximamente</CardTitle>
@@ -66,6 +85,7 @@ const Dashboard = () => {
             </p>
           </CardContent>
         </Card>
+        )}
       </main>
     </div>
   );
