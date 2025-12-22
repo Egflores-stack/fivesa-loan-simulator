@@ -223,6 +223,199 @@ app.put("/api/config/parameters", authenticateToken, requireAdmin, async (req, r
   } catch (error) {
     return res.status(500).json({ message: "Error al actualizar parámetros" });
   }
+const formatCurrency = (value) =>
+  new Intl.NumberFormat("es-MX", {
+    style: "currency",
+    currency: "MXN",
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(value);
+
+const formatPercent = (value) => `${Number(value).toFixed(2)}%`;
+
+const calculateLoan = ({ amount, downPayment, termMonths, annualRate }) => {
+  const effectiveAmount = amount - downPayment;
+
+  if (effectiveAmount <= 0 || termMonths <= 0) {
+    return {
+      loanAmount: amount,
+      monthlyPayment: 0,
+      totalPayment: 0,
+      totalInterest: 0,
+      effectiveAmount: 0,
+    };
+  }
+
+  const monthlyRate = annualRate / 100 / 12;
+  const monthlyPayment =
+    monthlyRate === 0
+      ? effectiveAmount / termMonths
+      : (effectiveAmount * monthlyRate * Math.pow(1 + monthlyRate, termMonths)) /
+        (Math.pow(1 + monthlyRate, termMonths) - 1);
+
+  const totalPayment = monthlyPayment * termMonths + downPayment;
+  const totalInterest = totalPayment - amount;
+
+  return {
+    loanAmount: amount,
+    monthlyPayment,
+    totalPayment,
+    totalInterest,
+    effectiveAmount,
+  };
+};
+
+const generateAmortizationTable = ({
+  amount,
+  downPayment,
+  termMonths,
+  annualRate,
+}) => {
+  const effectiveAmount = amount - downPayment;
+
+  if (effectiveAmount <= 0 || termMonths <= 0) {
+    return [];
+  }
+
+  const monthlyRate = annualRate / 100 / 12;
+  const summary = calculateLoan({
+    amount,
+    downPayment,
+    termMonths,
+    annualRate,
+  });
+  const table = [];
+  let balance = effectiveAmount;
+
+  for (let month = 1; month <= termMonths; month += 1) {
+    const interest = balance * monthlyRate;
+    const principal = summary.monthlyPayment - interest;
+    balance = Math.max(0, balance - principal);
+
+    table.push({
+      month,
+      payment: summary.monthlyPayment,
+      principal,
+      interest,
+      balance,
+    });
+  }
+
+  return table;
+};
+
+const buildControlSummaryRows = ({
+  amount,
+  downPayment,
+  termMonths,
+  annualRate,
+  summary,
+}) => [
+  { label: "Monto solicitado", value: formatCurrency(amount) },
+  { label: "Enganche", value: formatCurrency(downPayment) },
+  {
+    label: "Monto a financiar",
+    value: formatCurrency(summary.effectiveAmount),
+  },
+  { label: "Plazo", value: `${termMonths} meses` },
+  { label: "Tasa anual", value: formatPercent(annualRate) },
+  { label: "Pago mensual", value: formatCurrency(summary.monthlyPayment) },
+  {
+    label: "Total de intereses",
+    value: formatCurrency(summary.totalInterest),
+  },
+  { label: "Total a pagar", value: formatCurrency(summary.totalPayment) },
+];
+
+const parseReportParams = (req, res) => {
+  const { amount, downPayment, termMonths, annualRate } = req.body ?? {};
+  const parsed = {
+    amount: Number(amount),
+    downPayment: Number(downPayment),
+    termMonths: Number(termMonths),
+    annualRate: Number(annualRate),
+  };
+
+  if (
+    [parsed.amount, parsed.downPayment, parsed.termMonths, parsed.annualRate].some(
+      (value) => Number.isNaN(value)
+    )
+  ) {
+    res.status(400).json({ message: "Parámetros inválidos para el reporte" });
+    return null;
+  }
+
+  return parsed;
+};
+
+app.post("/api/reports/summary", authenticateToken, (req, res) => {
+  const params = parseReportParams(req, res);
+  if (!params) return;
+
+  const summary = calculateLoan(params);
+  const controlRows = buildControlSummaryRows({ ...params, summary });
+
+  res.json({
+    summary,
+    controlRows,
+    columns: ["Concepto", "Valor"],
+  });
+});
+
+app.post("/api/reports/amortization", authenticateToken, (req, res) => {
+  const params = parseReportParams(req, res);
+  if (!params) return;
+
+  const amortization = generateAmortizationTable(params);
+  res.json({ amortization });
+const summaryData = {
+  kpis: {
+    disbursements: 18500000,
+    portfolio: 96250000,
+    delinquency: 3.8,
+    index: 1.42,
+  },
+  monthlyTotals: [
+    {
+      month: "Enero 2024",
+      disbursements: 2800000,
+      portfolio: 90500000,
+      delinquency: 3.5,
+      index: 1.3,
+    },
+    {
+      month: "Febrero 2024",
+      disbursements: 3100000,
+      portfolio: 91800000,
+      delinquency: 3.6,
+      index: 1.34,
+    },
+    {
+      month: "Marzo 2024",
+      disbursements: 3350000,
+      portfolio: 93250000,
+      delinquency: 3.7,
+      index: 1.38,
+    },
+    {
+      month: "Abril 2024",
+      disbursements: 3600000,
+      portfolio: 94700000,
+      delinquency: 3.9,
+      index: 1.4,
+    },
+    {
+      month: "Mayo 2024",
+      disbursements: 3650000,
+      portfolio: 96250000,
+      delinquency: 3.8,
+      index: 1.42,
+    },
+  ],
+};
+
+app.get("/api/summary", (_req, res) => {
+  return res.json(summaryData);
 });
 
 const port = Number(process.env.PORT || 3001);
