@@ -1,15 +1,23 @@
-import { LoanSummary, formatCurrency } from "@/lib/loanCalculations";
+import { LoanSummary, formatCurrency, type PaymentFrequency } from "@/lib/loanCalculations";
 import { TrendingUp, Wallet, Calculator, BadgeDollarSign } from "lucide-react";
 
 interface LoanSummaryCardProps {
   summary: LoanSummary;
+  currency: "NIO" | "USD";
+  frequency: PaymentFrequency;
 }
 
-const LoanSummaryCard = ({ summary }: LoanSummaryCardProps) => {
+const frequencyLabel: Record<PaymentFrequency, string> = {
+  monthly: "Mensual",
+  biweekly: "Quincenal",
+  weekly: "Semanal",
+};
+
+const LoanSummaryCard = ({ summary, currency, frequency }: LoanSummaryCardProps) => {
   const stats = [
     {
-      label: "Pago Mensual",
-      value: formatCurrency(summary.monthlyPayment),
+      label: `Cuota ${frequencyLabel[frequency]}`,
+      value: formatCurrency(summary.paymentPerPeriod, currency),
       icon: Wallet,
       highlight: true,
       bgClass: "bg-accent",
@@ -17,15 +25,15 @@ const LoanSummaryCard = ({ summary }: LoanSummaryCardProps) => {
     },
     {
       label: "Monto a Financiar",
-      value: formatCurrency(summary.effectiveAmount),
+      value: formatCurrency(summary.effectiveAmount, currency),
       icon: BadgeDollarSign,
       highlight: false,
       bgClass: "bg-fivesa-blue-light",
       iconClass: "text-primary",
     },
     {
-      label: "Total a Pagar",
-      value: formatCurrency(summary.totalPayment),
+      label: "Total Comisión",
+      value: formatCurrency(summary.totalCommission, currency),
       icon: Calculator,
       highlight: false,
       bgClass: "bg-fivesa-green-light",
@@ -33,7 +41,7 @@ const LoanSummaryCard = ({ summary }: LoanSummaryCardProps) => {
     },
     {
       label: "Total de Intereses",
-      value: formatCurrency(summary.totalInterest),
+      value: formatCurrency(summary.totalInterest, currency),
       icon: TrendingUp,
       highlight: false,
       bgClass: "bg-fivesa-orange-light",

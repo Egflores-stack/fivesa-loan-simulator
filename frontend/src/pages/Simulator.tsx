@@ -1,4 +1,5 @@
-import { useState, useMemo } from "react";
+import { useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import Header from "@/components/Header";
 import LoanForm from "@/components/LoanForm";
 import LoanSummaryCard from "@/components/LoanSummaryCard";
@@ -9,36 +10,104 @@ import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   calculateLoan,
-  generateAmortizationTable,
   compareTerms,
+  generateAmortizationTable,
+  type CommissionType,
+  type PaymentFrequency,
 } from "@/lib/loanCalculations";
-import { Calculator, Table, BarChart3, GitCompare } from "lucide-react";
+import { BarChart3, Calculator, GitCompare, Table } from "lucide-react";
 
-const Index = () => {
+const Simulator = () => {
   const [amount, setAmount] = useState(100000);
   const [downPayment, setDownPayment] = useState(10000);
   const [termMonths, setTermMonths] = useState(24);
-  const [annualRate, setAnnualRate] = useState(18);
+  const [monthlyRate, setMonthlyRate] = useState(3.5);
+  const [currency, setCurrency] = useState<"NIO" | "USD">("NIO");
+  const [frequency, setFrequency] = useState<PaymentFrequency>("monthly");
+  const [commissionType, setCommissionType] = useState<CommissionType>(
+    "percentage"
+  );
+  const [commissionValue, setCommissionValue] = useState(2);
 
   const summary = useMemo(
-    () => calculateLoan({ amount, downPayment, termMonths, annualRate }),
-    [amount, downPayment, termMonths, annualRate]
+    () =>
+      calculateLoan({
+        amount,
+        downPayment,
+        termMonths,
+        monthlyRate,
+        frequency,
+        commissionType,
+        commissionValue,
+      }),
+    [
+      amount,
+      downPayment,
+      termMonths,
+      monthlyRate,
+      frequency,
+      commissionType,
+      commissionValue,
+    ]
   );
 
   const amortization = useMemo(
-    () => generateAmortizationTable({ amount, downPayment, termMonths, annualRate }),
-    [amount, downPayment, termMonths, annualRate]
+    () =>
+      generateAmortizationTable({
+        amount,
+        downPayment,
+        termMonths,
+        monthlyRate,
+        frequency,
+        commissionType,
+        commissionValue,
+      }),
+    [
+      amount,
+      downPayment,
+      termMonths,
+      monthlyRate,
+      frequency,
+      commissionType,
+      commissionValue,
+    ]
   );
 
   const termComparisons = useMemo(
-    () => compareTerms(amount, downPayment, annualRate, [12, 24, 36, 48]),
-    [amount, downPayment, annualRate]
+    () =>
+      compareTerms(
+        amount,
+        downPayment,
+        monthlyRate,
+        frequency,
+        commissionType,
+        commissionValue,
+        [12, 24, 36, 48]
+      ),
+    [
+      amount,
+      downPayment,
+      monthlyRate,
+      frequency,
+      commissionType,
+      commissionValue,
+    ]
   );
 
   return (
     <div className="min-h-screen bg-background">
       <Header />
-      
+      <div className="border-b border-border bg-card/70">
+        <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-3 sm:px-6 lg:px-8">
+          <p className="text-sm text-muted-foreground">
+            Panel / Simulador de crédito
+          </p>
+          <Button asChild variant="ghost" size="sm">
+            <Link to="/dashboard">Volver al dashboard</Link>
+          </Button>
+        </div>
+      </div>
+
       {/* Hero Section */}
       <section className="relative overflow-hidden bg-gradient-to-br from-primary via-primary to-secondary py-16 text-primary-foreground">
         <div className="absolute inset-0 bg-[url('data:image/svg+xml,%3Csvg%20width%3D%2260%22%20height%3D%2260%22%20viewBox%3D%220%200%2060%2060%22%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%3E%3Cg%20fill%3D%22none%22%20fill-rule%3D%22evenodd%22%3E%3Cg%20fill%3D%22%23ffffff%22%20fill-opacity%3D%220.05%22%3E%3Cpath%20d%3D%22M36%2034v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6%2034v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6%204V0H4v4H0v2h4v4h2V6h4V4H6z%22/%3E%3C/g%3E%3C/g%3E%3C/svg%3E')] opacity-50" />
@@ -48,8 +117,8 @@ const Index = () => {
               Simulador de Crédito
             </h1>
             <p className="mx-auto mt-4 max-w-2xl animate-slide-up text-lg text-primary-foreground/80">
-              Calcula tu préstamo personal de manera rápida y sencilla. 
-              Conoce tu pago mensual y explora diferentes opciones de plazo.
+              Calcula tu préstamo personal de manera rápida y sencilla.
+              Conoce tu cuota según la frecuencia de pago y comisiones.
             </p>
           </div>
         </div>
@@ -78,11 +147,19 @@ const Index = () => {
                 amount={amount}
                 downPayment={downPayment}
                 termMonths={termMonths}
-                annualRate={annualRate}
+                monthlyRate={monthlyRate}
+                currency={currency}
+                frequency={frequency}
+                commissionType={commissionType}
+                commissionValue={commissionValue}
                 onAmountChange={setAmount}
                 onDownPaymentChange={setDownPayment}
                 onTermChange={setTermMonths}
-                onRateChange={setAnnualRate}
+                onRateChange={setMonthlyRate}
+                onCurrencyChange={setCurrency}
+                onFrequencyChange={setFrequency}
+                onCommissionTypeChange={setCommissionType}
+                onCommissionValueChange={setCommissionValue}
               />
               <div className="mt-8">
                 <Button variant="accent" size="xl" className="w-full">
@@ -95,7 +172,7 @@ const Index = () => {
           {/* Results Section */}
           <div className="space-y-8 lg:col-span-3">
             {/* Summary Cards */}
-            <LoanSummaryCard summary={summary} />
+            <LoanSummaryCard summary={summary} currency={currency} frequency={frequency} />
 
             {/* Tabs for detailed info */}
             <Tabs defaultValue="comparison" className="w-full">
@@ -118,16 +195,18 @@ const Index = () => {
                   comparisons={termComparisons}
                   selectedTerm={termMonths}
                   onSelectTerm={setTermMonths}
+                  currency={currency}
                 />
               </TabsContent>
               <TabsContent value="table" className="mt-6">
-                <AmortizationTable data={amortization} />
+                <AmortizationTable data={amortization} currency={currency} />
               </TabsContent>
               <TabsContent value="charts" className="mt-6">
                 <LoanChart
                   data={amortization}
                   totalPrincipal={summary.effectiveAmount}
                   totalInterest={summary.totalInterest}
+                  currency={currency}
                 />
               </TabsContent>
             </Tabs>
@@ -142,7 +221,7 @@ const Index = () => {
             © 2024 FIVESA. Todos los derechos reservados.
           </p>
           <p className="mt-2 text-xs text-muted-foreground">
-            * Este simulador es solo una referencia. Las condiciones finales del crédito 
+            * Este simulador es solo una referencia. Las condiciones finales del crédito
             pueden variar según tu perfil crediticio y las políticas vigentes.
           </p>
         </div>
@@ -151,4 +230,4 @@ const Index = () => {
   );
 };
 
-export default Index;
+export default Simulator;

@@ -11,9 +11,10 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 
 interface AmortizationTableProps {
   data: AmortizationRow[];
+  currency: "NIO" | "USD";
 }
 
-const AmortizationTable = ({ data }: AmortizationTableProps) => {
+const AmortizationTable = ({ data, currency }: AmortizationTableProps) => {
   if (data.length === 0) return null;
 
   return (
@@ -23,40 +24,44 @@ const AmortizationTable = ({ data }: AmortizationTableProps) => {
           Tabla de Amortización
         </h3>
         <p className="text-sm text-muted-foreground">
-          Desglose mensual de tu crédito
+          Desglose de cuotas según la frecuencia seleccionada
         </p>
       </div>
       <ScrollArea className="h-[400px]">
         <Table>
           <TableHeader className="sticky top-0 bg-muted/80 backdrop-blur-sm">
             <TableRow>
-              <TableHead className="w-20 text-center font-semibold">Mes</TableHead>
+              <TableHead className="w-24 text-center font-semibold">No. Cuota</TableHead>
               <TableHead className="text-right font-semibold">Pago</TableHead>
               <TableHead className="text-right font-semibold">Capital</TableHead>
               <TableHead className="text-right font-semibold">Interés</TableHead>
+              <TableHead className="text-right font-semibold">Comisión</TableHead>
               <TableHead className="text-right font-semibold">Saldo</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {data.map((row, index) => (
+            {data.map((row) => (
               <TableRow
-                key={row.month}
+                key={row.paymentNumber}
                 className="transition-colors hover:bg-muted/50"
               >
                 <TableCell className="text-center font-medium">
-                  {row.month}
+                  {row.paymentNumber}
                 </TableCell>
                 <TableCell className="text-right">
-                  {formatCurrency(row.payment)}
+                  {formatCurrency(row.payment, currency)}
                 </TableCell>
                 <TableCell className="text-right text-secondary">
-                  {formatCurrency(row.principal)}
+                  {formatCurrency(row.principal, currency)}
                 </TableCell>
                 <TableCell className="text-right text-accent">
-                  {formatCurrency(row.interest)}
+                  {formatCurrency(row.interest, currency)}
+                </TableCell>
+                <TableCell className="text-right text-primary">
+                  {formatCurrency(row.commission, currency)}
                 </TableCell>
                 <TableCell className="text-right font-medium">
-                  {formatCurrency(row.balance)}
+                  {formatCurrency(row.balance, currency)}
                 </TableCell>
               </TableRow>
             ))}
