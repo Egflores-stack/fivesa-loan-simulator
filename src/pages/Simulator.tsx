@@ -5,15 +5,31 @@ import LoanSummaryCard from "@/components/LoanSummaryCard";
 import AmortizationTable from "@/components/AmortizationTable";
 import LoanChart from "@/components/LoanChart";
 import TermComparison from "@/components/TermComparison";
+import ControlSummaryTable from "@/components/ControlSummaryTable";
 import { Button } from "@/components/ui/button";
 import { Link } from "react-router-dom";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   calculateLoan,
   generateAmortizationTable,
   compareTerms,
 } from "@/lib/loanCalculations";
-import { Calculator, Table, BarChart3, GitCompare } from "lucide-react";
+import {
+  buildControlSummaryRows,
+  buildReportCsv,
+  buildReportPdfHtml,
+  downloadCsv,
+  openReportPdf,
+} from "@/lib/reporting";
+import {
+  BarChart3,
+  Calculator,
+  FileDown,
+  FileText,
+  GitCompare,
+  Table,
+} from "lucide-react";
 
 const Index = () => {
   const [amount, setAmount] = useState(100000);
@@ -35,6 +51,28 @@ const Index = () => {
     () => compareTerms(amount, downPayment, annualRate, [12, 24, 36, 48]),
     [amount, downPayment, annualRate]
   );
+
+  const controlRows = useMemo(
+    () =>
+      buildControlSummaryRows({
+        amount,
+        downPayment,
+        termMonths,
+        annualRate,
+        summary,
+      }),
+    [amount, downPayment, termMonths, annualRate, summary]
+  );
+
+  const handleExportCsv = () => {
+    const csv = buildReportCsv({ rows: controlRows, amortization });
+    downloadCsv(csv, `reporte-credito-${termMonths}m.csv`);
+  };
+
+  const handleExportPdf = () => {
+    const html = buildReportPdfHtml({ rows: controlRows, amortization });
+    openReportPdf(html);
+  };
 
   return (
     <div className="min-h-screen bg-background">
@@ -105,8 +143,25 @@ const Index = () => {
 
           {/* Results Section */}
           <div className="space-y-8 lg:col-span-3">
+            <Card className="border-dashed">
+              <CardHeader>
+                <CardTitle className="text-lg">Exportación</CardTitle>
+              </CardHeader>
+              <CardContent className="flex flex-wrap gap-3">
+                <Button variant="secondary" onClick={handleExportCsv}>
+                  <FileDown className="mr-2 h-4 w-4" />
+                  Exportar CSV
+                </Button>
+                <Button variant="outline" onClick={handleExportPdf}>
+                  <FileText className="mr-2 h-4 w-4" />
+                  Exportar PDF
+                </Button>
+              </CardContent>
+            </Card>
             {/* Summary Cards */}
             <LoanSummaryCard summary={summary} />
+
+            <ControlSummaryTable rows={controlRows} />
 
             {/* Tabs for detailed info */}
             <Tabs defaultValue="comparison" className="w-full">
