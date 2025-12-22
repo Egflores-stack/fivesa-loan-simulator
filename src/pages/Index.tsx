@@ -1,154 +1,19 @@
-import { useState, useMemo } from "react";
-import Header from "@/components/Header";
-import LoanForm from "@/components/LoanForm";
-import LoanSummaryCard from "@/components/LoanSummaryCard";
-import AmortizationTable from "@/components/AmortizationTable";
-import LoanChart from "@/components/LoanChart";
-import TermComparison from "@/components/TermComparison";
-import { Button } from "@/components/ui/button";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import {
-  calculateLoan,
-  generateAmortizationTable,
-  compareTerms,
-} from "@/lib/loanCalculations";
-import { Calculator, Table, BarChart3, GitCompare } from "lucide-react";
+import { Navigate, useLocation } from "react-router-dom";
+import { useAuth } from "@/hooks/use-auth";
 
 const Index = () => {
-  const [amount, setAmount] = useState(100000);
-  const [downPayment, setDownPayment] = useState(10000);
-  const [termMonths, setTermMonths] = useState(24);
-  const [annualRate, setAnnualRate] = useState(18);
+  const { user, isLoading } = useAuth();
+  const location = useLocation();
 
-  const summary = useMemo(
-    () => calculateLoan({ amount, downPayment, termMonths, annualRate }),
-    [amount, downPayment, termMonths, annualRate]
-  );
+  if (isLoading) {
+    return null;
+  }
 
-  const amortization = useMemo(
-    () => generateAmortizationTable({ amount, downPayment, termMonths, annualRate }),
-    [amount, downPayment, termMonths, annualRate]
-  );
+  if (user) {
+    return <Navigate to="/dashboard" replace />;
+  }
 
-  const termComparisons = useMemo(
-    () => compareTerms(amount, downPayment, annualRate, [12, 24, 36, 48]),
-    [amount, downPayment, annualRate]
-  );
-
-  return (
-    <div className="min-h-screen bg-background">
-      <Header />
-      
-      {/* Hero Section */}
-      <section className="relative overflow-hidden bg-gradient-to-br from-primary via-primary to-secondary py-16 text-primary-foreground">
-        <div className="absolute inset-0 bg-[url('data:image/svg+xml,%3Csvg%20width%3D%2260%22%20height%3D%2260%22%20viewBox%3D%220%200%2060%2060%22%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%3E%3Cg%20fill%3D%22none%22%20fill-rule%3D%22evenodd%22%3E%3Cg%20fill%3D%22%23ffffff%22%20fill-opacity%3D%220.05%22%3E%3Cpath%20d%3D%22M36%2034v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6%2034v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6%204V0H4v4H0v2h4v4h2V6h4V4H6z%22/%3E%3C/g%3E%3C/g%3E%3C/svg%3E')] opacity-50" />
-        <div className="relative mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-          <div className="text-center">
-            <h1 className="animate-fade-in text-4xl font-bold tracking-tight sm:text-5xl lg:text-6xl">
-              Simulador de Crédito
-            </h1>
-            <p className="mx-auto mt-4 max-w-2xl animate-slide-up text-lg text-primary-foreground/80">
-              Calcula tu préstamo personal de manera rápida y sencilla. 
-              Conoce tu pago mensual y explora diferentes opciones de plazo.
-            </p>
-          </div>
-        </div>
-      </section>
-
-      {/* Main Content */}
-      <main className="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8">
-        <div className="grid gap-8 lg:grid-cols-5">
-          {/* Form Section */}
-          <div className="lg:col-span-2">
-            <div className="sticky top-24 rounded-2xl border border-border bg-card p-6 shadow-lg">
-              <div className="mb-6 flex items-center gap-3">
-                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary">
-                  <Calculator className="h-5 w-5 text-primary-foreground" />
-                </div>
-                <div>
-                  <h2 className="text-lg font-semibold text-foreground">
-                    Configura tu Crédito
-                  </h2>
-                  <p className="text-sm text-muted-foreground">
-                    Ajusta los valores según tus necesidades
-                  </p>
-                </div>
-              </div>
-              <LoanForm
-                amount={amount}
-                downPayment={downPayment}
-                termMonths={termMonths}
-                annualRate={annualRate}
-                onAmountChange={setAmount}
-                onDownPaymentChange={setDownPayment}
-                onTermChange={setTermMonths}
-                onRateChange={setAnnualRate}
-              />
-              <div className="mt-8">
-                <Button variant="accent" size="xl" className="w-full">
-                  Solicitar Crédito
-                </Button>
-              </div>
-            </div>
-          </div>
-
-          {/* Results Section */}
-          <div className="space-y-8 lg:col-span-3">
-            {/* Summary Cards */}
-            <LoanSummaryCard summary={summary} />
-
-            {/* Tabs for detailed info */}
-            <Tabs defaultValue="comparison" className="w-full">
-              <TabsList className="grid w-full grid-cols-3">
-                <TabsTrigger value="comparison" className="gap-2">
-                  <GitCompare className="h-4 w-4" />
-                  <span className="hidden sm:inline">Comparar</span>
-                </TabsTrigger>
-                <TabsTrigger value="table" className="gap-2">
-                  <Table className="h-4 w-4" />
-                  <span className="hidden sm:inline">Amortización</span>
-                </TabsTrigger>
-                <TabsTrigger value="charts" className="gap-2">
-                  <BarChart3 className="h-4 w-4" />
-                  <span className="hidden sm:inline">Gráficos</span>
-                </TabsTrigger>
-              </TabsList>
-              <TabsContent value="comparison" className="mt-6">
-                <TermComparison
-                  comparisons={termComparisons}
-                  selectedTerm={termMonths}
-                  onSelectTerm={setTermMonths}
-                />
-              </TabsContent>
-              <TabsContent value="table" className="mt-6">
-                <AmortizationTable data={amortization} />
-              </TabsContent>
-              <TabsContent value="charts" className="mt-6">
-                <LoanChart
-                  data={amortization}
-                  totalPrincipal={summary.effectiveAmount}
-                  totalInterest={summary.totalInterest}
-                />
-              </TabsContent>
-            </Tabs>
-          </div>
-        </div>
-      </main>
-
-      {/* Footer */}
-      <footer className="border-t border-border bg-card py-8">
-        <div className="mx-auto max-w-7xl px-4 text-center sm:px-6 lg:px-8">
-          <p className="text-sm text-muted-foreground">
-            © 2024 FIVESA. Todos los derechos reservados.
-          </p>
-          <p className="mt-2 text-xs text-muted-foreground">
-            * Este simulador es solo una referencia. Las condiciones finales del crédito 
-            pueden variar según tu perfil crediticio y las políticas vigentes.
-          </p>
-        </div>
-      </footer>
-    </div>
-  );
+  return <Navigate to="/login" replace state={{ from: location }} />;
 };
 
 export default Index;
