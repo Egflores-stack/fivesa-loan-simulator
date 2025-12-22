@@ -6,6 +6,17 @@ CREATE TABLE IF NOT EXISTS users (
   created_at timestamptz NOT NULL DEFAULT now()
 );
 
+CREATE TABLE IF NOT EXISTS parameters (
+  id integer PRIMARY KEY,
+  dias_mora_vencido integer NOT NULL DEFAULT 0,
+  cuotas_vencido integer NOT NULL DEFAULT 0,
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+
+INSERT INTO parameters (id, dias_mora_vencido, cuotas_vencido)
+VALUES (1, 0, 0)
+ON CONFLICT (id) DO NOTHING;
+
 -- Example seed (password: "demo1234")
 -- INSERT INTO users (email, role, password_hash)
 -- VALUES (
