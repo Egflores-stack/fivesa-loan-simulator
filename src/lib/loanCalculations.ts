@@ -1,87 +1,145 @@
+export type PaymentFrequency = "monthly" | "biweekly" | "weekly";
+export type CommissionType = "percentage" | "amount";
+
 export interface LoanParams {
   amount: number;
   downPayment: number;
   termMonths: number;
-  annualRate: number;
+  monthlyRate: number;
+  frequency: PaymentFrequency;
+  commissionType: CommissionType;
+  commissionValue: number;
 }
 
 export interface AmortizationRow {
-  month: number;
+  paymentNumber: number;
   payment: number;
   principal: number;
   interest: number;
+  commission: number;
   balance: number;
 }
 
 export interface LoanSummary {
   loanAmount: number;
-  monthlyPayment: number;
+  paymentPerPeriod: number;
   totalPayment: number;
   totalInterest: number;
+  totalCommission: number;
   effectiveAmount: number;
+  numberOfPayments: number;
+  periodicRate: number;
 }
 
+const frequencyDivisors: Record<PaymentFrequency, number> = {
+  monthly: 1,
+  biweekly: 2,
+  weekly: 4,
+};
+
 export function calculateLoan(params: LoanParams): LoanSummary {
-  const { amount, downPayment, termMonths, annualRate } = params;
+  const {
+    amount,
+    downPayment,
+    termMonths,
+    monthlyRate,
+    frequency,
+    commissionType,
+    commissionValue,
+  } = params;
   const effectiveAmount = amount - downPayment;
-  
+
   if (effectiveAmount <= 0 || termMonths <= 0) {
     return {
       loanAmount: amount,
-      monthlyPayment: 0,
+      paymentPerPeriod: 0,
       totalPayment: 0,
       totalInterest: 0,
+      totalCommission: 0,
       effectiveAmount: 0,
+      numberOfPayments: 0,
+      periodicRate: 0,
     };
   }
 
-  const monthlyRate = annualRate / 100 / 12;
-  
-  let monthlyPayment: number;
-  if (monthlyRate === 0) {
-    monthlyPayment = effectiveAmount / termMonths;
+  const divisor = frequencyDivisors[frequency];
+  const numberOfPayments = termMonths * divisor;
+  const periodicRate = monthlyRate / 100 / divisor;
+
+  let basePayment: number;
+  if (periodicRate === 0) {
+    basePayment = effectiveAmount / numberOfPayments;
   } else {
-    monthlyPayment =
-      (effectiveAmount * monthlyRate * Math.pow(1 + monthlyRate, termMonths)) /
-      (Math.pow(1 + monthlyRate, termMonths) - 1);
+    basePayment =
+      (effectiveAmount * periodicRate * Math.pow(1 + periodicRate, numberOfPayments)) /
+      (Math.pow(1 + periodicRate, numberOfPayments) - 1);
   }
 
-  const totalPayment = monthlyPayment * termMonths + downPayment;
-  const totalInterest = totalPayment - amount;
+  const totalCommission =
+    commissionType === "percentage"
+      ? (effectiveAmount * commissionValue) / 100
+      : commissionValue;
+  const commissionPerPayment = numberOfPayments > 0 ? totalCommission / numberOfPayments : 0;
+
+  const totalInterest = basePayment * numberOfPayments - effectiveAmount;
+  const paymentPerPeriod = basePayment + commissionPerPayment;
+  const totalPayment =
+    paymentPerPeriod * numberOfPayments + downPayment;
 
   return {
     loanAmount: amount,
-    monthlyPayment,
+    paymentPerPeriod,
     totalPayment,
     totalInterest,
+    totalCommission,
     effectiveAmount,
+    numberOfPayments,
+    periodicRate,
   };
 }
 
 export function generateAmortizationTable(params: LoanParams): AmortizationRow[] {
-  const { amount, downPayment, termMonths, annualRate } = params;
+  const {
+    amount,
+    downPayment,
+    termMonths,
+    monthlyRate,
+    frequency,
+    commissionType,
+    commissionValue,
+  } = params;
   const effectiveAmount = amount - downPayment;
-  
+
   if (effectiveAmount <= 0 || termMonths <= 0) {
     return [];
   }
 
-  const monthlyRate = annualRate / 100 / 12;
+  const divisor = frequencyDivisors[frequency];
+  const numberOfPayments = termMonths * divisor;
+  const periodicRate = monthlyRate / 100 / divisor;
   const summary = calculateLoan(params);
   const table: AmortizationRow[] = [];
-  
   let balance = effectiveAmount;
 
-  for (let month = 1; month <= termMonths; month++) {
-    const interest = balance * monthlyRate;
-    const principal = summary.monthlyPayment - interest;
+  const commissionTotal =
+    commissionType === "percentage"
+      ? (effectiveAmount * commissionValue) / 100
+      : commissionValue;
+  const commissionPerPayment = numberOfPayments > 0 ? commissionTotal / numberOfPayments : 0;
+
+  const basePayment = summary.paymentPerPeriod - commissionPerPayment;
+
+  for (let paymentNumber = 1; paymentNumber <= numberOfPayments; paymentNumber += 1) {
+    const interest = balance * periodicRate;
+    const principal = basePayment - interest;
     balance = Math.max(0, balance - principal);
 
     table.push({
-      month,
-      payment: summary.monthlyPayment,
+      paymentNumber,
+      payment: summary.paymentPerPeriod,
       principal,
       interest,
+      commission: commissionPerPayment,
       balance,
     });
   }
@@ -92,19 +150,31 @@ export function generateAmortizationTable(params: LoanParams): AmortizationRow[]
 export function compareTerms(
   amount: number,
   downPayment: number,
-  annualRate: number,
+  monthlyRate: number,
+  frequency: PaymentFrequency,
+  commissionType: CommissionType,
+  commissionValue: number,
   terms: number[]
 ): { term: number; summary: LoanSummary }[] {
   return terms.map((term) => ({
     term,
-    summary: calculateLoan({ amount, downPayment, termMonths: term, annualRate }),
+    summary: calculateLoan({
+      amount,
+      downPayment,
+      termMonths: term,
+      monthlyRate,
+      frequency,
+      commissionType,
+      commissionValue,
+    }),
   }));
 }
 
-export function formatCurrency(value: number): string {
-  return new Intl.NumberFormat("es-MX", {
+export function formatCurrency(value: number, currency = "NIO"): string {
+  const locale = currency === "USD" ? "en-US" : "es-NI";
+  return new Intl.NumberFormat(locale, {
     style: "currency",
-    currency: "MXN",
+    currency,
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   }).format(value);

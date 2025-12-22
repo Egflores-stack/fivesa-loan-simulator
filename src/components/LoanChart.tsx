@@ -17,13 +17,14 @@ interface LoanChartProps {
   data: AmortizationRow[];
   totalPrincipal: number;
   totalInterest: number;
+  currency: "NIO" | "USD";
 }
 
-const LoanChart = ({ data, totalPrincipal, totalInterest }: LoanChartProps) => {
+const LoanChart = ({ data, totalPrincipal, totalInterest, currency }: LoanChartProps) => {
   if (data.length === 0) return null;
 
   const chartData = data.map((row) => ({
-    month: row.month,
+    paymentNumber: row.paymentNumber,
     Capital: row.principal,
     Interés: row.interest,
     Saldo: row.balance,
@@ -38,14 +39,14 @@ const LoanChart = ({ data, totalPrincipal, totalInterest }: LoanChartProps) => {
     if (active && payload && payload.length) {
       return (
         <div className="rounded-lg border border-border bg-card p-3 shadow-lg">
-          <p className="mb-2 font-semibold text-foreground">Mes {label}</p>
+          <p className="mb-2 font-semibold text-foreground">Cuota {label}</p>
           {payload.map((entry: any, index: number) => (
             <p
               key={index}
               className="text-sm"
               style={{ color: entry.color }}
             >
-              {entry.name}: {formatCurrency(entry.value)}
+              {entry.name}: {formatCurrency(entry.value, currency)}
             </p>
           ))}
         </div>
@@ -76,7 +77,7 @@ const LoanChart = ({ data, totalPrincipal, totalInterest }: LoanChartProps) => {
               </defs>
               <CartesianGrid strokeDasharray="3 3" stroke="hsl(213, 30%, 88%)" />
               <XAxis
-                dataKey="month"
+                dataKey="paymentNumber"
                 stroke="hsl(213, 30%, 45%)"
                 fontSize={12}
                 tickLine={false}
@@ -85,7 +86,7 @@ const LoanChart = ({ data, totalPrincipal, totalInterest }: LoanChartProps) => {
                 stroke="hsl(213, 30%, 45%)"
                 fontSize={12}
                 tickLine={false}
-                tickFormatter={(value) => `$${(value / 1000).toFixed(0)}k`}
+                tickFormatter={(value) => formatCurrency(value, currency)}
               />
               <Tooltip content={<CustomTooltip />} />
               <Legend />
@@ -133,7 +134,7 @@ const LoanChart = ({ data, totalPrincipal, totalInterest }: LoanChartProps) => {
                   ))}
                 </Pie>
                 <Tooltip
-                  formatter={(value: number) => formatCurrency(value)}
+                  formatter={(value: number) => formatCurrency(value, currency)}
                   contentStyle={{
                     backgroundColor: "hsl(0, 0%, 100%)",
                     border: "1px solid hsl(213, 30%, 88%)",
@@ -154,7 +155,7 @@ const LoanChart = ({ data, totalPrincipal, totalInterest }: LoanChartProps) => {
                   <span className="font-medium text-foreground">{item.name}</span>
                 </div>
                 <span className="font-semibold text-foreground">
-                  {formatCurrency(item.value)}
+                  {formatCurrency(item.value, currency)}
                 </span>
               </div>
             ))}
@@ -162,7 +163,7 @@ const LoanChart = ({ data, totalPrincipal, totalInterest }: LoanChartProps) => {
               <div className="flex items-center justify-between">
                 <span className="font-semibold text-foreground">Total</span>
                 <span className="font-bold text-primary">
-                  {formatCurrency(totalPrincipal + totalInterest)}
+                  {formatCurrency(totalPrincipal + totalInterest, currency)}
                 </span>
               </div>
             </div>

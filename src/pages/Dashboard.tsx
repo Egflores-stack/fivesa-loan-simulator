@@ -1,4 +1,8 @@
 import { Link, useNavigate } from "react-router-dom";
+import { useAuth } from "@/hooks/use-auth";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Calculator, ClipboardList, LogOut, UserCircle2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useAuth } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
@@ -121,6 +125,25 @@ const Dashboard = () => {
         </div>
       </header>
 
+      <main className="mx-auto grid max-w-6xl gap-6 px-4 py-10 md:grid-cols-2">
+        <Card className="shadow-sm">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-xl">
+              <Calculator className="h-5 w-5 text-primary" />
+              Simulador de crédito
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              Ingresa al simulador para calcular cuotas, comparar plazos y
+              visualizar el detalle de amortización.
+            </p>
+            <Button asChild>
+              <Link to="/simulator">Ir al simulador</Link>
+            </Button>
+          </CardContent>
+        </Card>
+
       <main className="mx-auto flex max-w-6xl flex-col gap-8 px-4 py-10">
         <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
           {kpiMeta.map((kpi) => {
@@ -184,6 +207,30 @@ const Dashboard = () => {
             <CardTitle className="text-xl">Próximamente</CardTitle>
           </CardHeader>
           <CardContent>
+            <p className="text-sm text-muted-foreground">
+              Aquí podrás revisar aprobaciones y reportes cuando los siguientes
+              módulos estén listos.
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card className="shadow-sm">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-xl">
+              <ClipboardList className="h-5 w-5 text-primary" />
+              Solicitudes de crédito
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              Registra solicitudes nuevas o de refinanciamiento y gestiona el
+              listado de pendientes.
+            </p>
+            <Button asChild>
+              <Link to="/requests">Ir a solicitudes</Link>
+            </Button>
+          </CardContent>
+        </Card>
         <section className="rounded-xl border border-border bg-card shadow-sm">
           <div className="flex flex-col gap-2 border-b border-border px-6 py-4">
             <h2 className="text-lg font-semibold text-foreground">

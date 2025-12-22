@@ -78,6 +78,155 @@ app.post("/api/auth/logout", (_req, res) => {
   return res.status(204).send();
 });
 
+app.get("/api/requests", authenticateToken, async (req, res) => {
+  const status = req.query.status || "pending";
+  try {
+    const result = await query(
+      "SELECT * FROM loan_requests WHERE status = $1 ORDER BY created_at DESC",
+      [status]
+    );
+    return res.json({ requests: result.rows });
+  } catch (error) {
+    return res.status(500).json({ message: "Error al cargar solicitudes" });
+  }
+});
+
+app.post("/api/requests", authenticateToken, async (req, res) => {
+  const {
+    type,
+    currency,
+    amount,
+    termMonths,
+    monthlyRate,
+    paymentFrequency,
+    commissionType,
+    commissionValue,
+    previousBalance,
+    responsible,
+    manager,
+    paymentDates,
+  } = req.body ?? {};
+
+  if (
+    !type ||
+    !currency ||
+    !amount ||
+    !termMonths ||
+    !monthlyRate ||
+    !paymentFrequency ||
+    !commissionType ||
+    commissionValue === undefined ||
+    !responsible ||
+    !manager
+  ) {
+    return res.status(400).json({ message: "Datos incompletos" });
+  }
+
+  try {
+    const result = await query(
+      `INSERT INTO loan_requests
+      (type, currency, amount, term_months, monthly_rate, payment_frequency, commission_type, commission_value, previous_balance, responsible, manager, payment_dates)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+      RETURNING *`,
+      [
+        type,
+        currency,
+        amount,
+        termMonths,
+        monthlyRate,
+        paymentFrequency,
+        commissionType,
+        commissionValue,
+        previousBalance ?? null,
+        responsible,
+        manager,
+        paymentDates ?? null,
+      ]
+    );
+    return res.status(201).json({ request: result.rows[0] });
+  } catch (error) {
+    return res.status(500).json({ message: "Error al guardar solicitud" });
+  }
+});
+
+app.put("/api/requests/:id", authenticateToken, async (req, res) => {
+  const { id } = req.params;
+  const {
+    type,
+    currency,
+    amount,
+    termMonths,
+    monthlyRate,
+    paymentFrequency,
+    commissionType,
+    commissionValue,
+    previousBalance,
+    responsible,
+    manager,
+    paymentDates,
+    status,
+  } = req.body ?? {};
+
+  try {
+    const result = await query(
+      `UPDATE loan_requests
+      SET type = $1,
+          currency = $2,
+          amount = $3,
+          term_months = $4,
+          monthly_rate = $5,
+          payment_frequency = $6,
+          commission_type = $7,
+          commission_value = $8,
+          previous_balance = $9,
+          responsible = $10,
+          manager = $11,
+          payment_dates = $12,
+          status = $13
+      WHERE id = $14
+      RETURNING *`,
+      [
+        type,
+        currency,
+        amount,
+        termMonths,
+        monthlyRate,
+        paymentFrequency,
+        commissionType,
+        commissionValue,
+        previousBalance ?? null,
+        responsible,
+        manager,
+        paymentDates ?? null,
+        status ?? "pending",
+        id,
+      ]
+    );
+
+    if (result.rowCount === 0) {
+      return res.status(404).json({ message: "Solicitud no encontrada" });
+    }
+
+    return res.json({ request: result.rows[0] });
+  } catch (error) {
+    return res.status(500).json({ message: "Error al actualizar solicitud" });
+  }
+});
+
+app.delete("/api/requests/:id", authenticateToken, async (req, res) => {
+  const { id } = req.params;
+  try {
+    const result = await query(
+      "DELETE FROM loan_requests WHERE id = $1",
+      [id]
+    );
+    if (result.rowCount === 0) {
+      return res.status(404).json({ message: "Solicitud no encontrada" });
+    }
+    return res.status(204).send();
+  } catch (error) {
+    return res.status(500).json({ message: "Error al eliminar solicitud" });
+  }
 const requireAdmin = (req, res, next) => {
   if (req.user?.role !== "Administrador") {
     return res.status(403).json({ message: "Acceso restringido" });

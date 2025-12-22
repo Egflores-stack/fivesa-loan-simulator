@@ -1,3 +1,5 @@
+import { useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import { useState, useMemo } from "react";
 import Header from "@/components/Header";
 import LoanForm from "@/components/LoanForm";
@@ -5,6 +7,94 @@ import LoanSummaryCard from "@/components/LoanSummaryCard";
 import AmortizationTable from "@/components/AmortizationTable";
 import LoanChart from "@/components/LoanChart";
 import TermComparison from "@/components/TermComparison";
+import { Button } from "@/components/ui/button";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  calculateLoan,
+  compareTerms,
+  generateAmortizationTable,
+  type CommissionType,
+  type PaymentFrequency,
+} from "@/lib/loanCalculations";
+import { BarChart3, Calculator, GitCompare, Table } from "lucide-react";
+
+const Simulator = () => {
+  const [amount, setAmount] = useState(100000);
+  const [downPayment, setDownPayment] = useState(10000);
+  const [termMonths, setTermMonths] = useState(24);
+  const [monthlyRate, setMonthlyRate] = useState(3.5);
+  const [currency, setCurrency] = useState<"NIO" | "USD">("NIO");
+  const [frequency, setFrequency] = useState<PaymentFrequency>("monthly");
+  const [commissionType, setCommissionType] = useState<CommissionType>(
+    "percentage"
+  );
+  const [commissionValue, setCommissionValue] = useState(2);
+
+  const summary = useMemo(
+    () =>
+      calculateLoan({
+        amount,
+        downPayment,
+        termMonths,
+        monthlyRate,
+        frequency,
+        commissionType,
+        commissionValue,
+      }),
+    [
+      amount,
+      downPayment,
+      termMonths,
+      monthlyRate,
+      frequency,
+      commissionType,
+      commissionValue,
+    ]
+  );
+
+  const amortization = useMemo(
+    () =>
+      generateAmortizationTable({
+        amount,
+        downPayment,
+        termMonths,
+        monthlyRate,
+        frequency,
+        commissionType,
+        commissionValue,
+      }),
+    [
+      amount,
+      downPayment,
+      termMonths,
+      monthlyRate,
+      frequency,
+      commissionType,
+      commissionValue,
+    ]
+  );
+
+  const termComparisons = useMemo(
+    () =>
+      compareTerms(
+        amount,
+        downPayment,
+        monthlyRate,
+        frequency,
+        commissionType,
+        commissionValue,
+        [12, 24, 36, 48]
+      ),
+    [
+      amount,
+      downPayment,
+      monthlyRate,
+      frequency,
+      commissionType,
+      commissionValue,
+    ]
+  );
+
 import ControlSummaryTable from "@/components/ControlSummaryTable";
 import { Button } from "@/components/ui/button";
 import { Link } from "react-router-dom";
@@ -87,6 +177,7 @@ const Index = () => {
           </Button>
         </div>
       </div>
+
       
       {/* Hero Section */}
       <section className="relative overflow-hidden bg-gradient-to-br from-primary via-primary to-secondary py-16 text-primary-foreground">
@@ -97,6 +188,8 @@ const Index = () => {
               Simulador de Crédito
             </h1>
             <p className="mx-auto mt-4 max-w-2xl animate-slide-up text-lg text-primary-foreground/80">
+              Calcula tu préstamo personal de manera rápida y sencilla.
+              Conoce tu cuota según la frecuencia de pago y comisiones.
               Calcula tu préstamo personal de manera rápida y sencilla. 
               Conoce tu pago mensual y explora diferentes opciones de plazo.
             </p>
@@ -127,6 +220,19 @@ const Index = () => {
                 amount={amount}
                 downPayment={downPayment}
                 termMonths={termMonths}
+                monthlyRate={monthlyRate}
+                currency={currency}
+                frequency={frequency}
+                commissionType={commissionType}
+                commissionValue={commissionValue}
+                onAmountChange={setAmount}
+                onDownPaymentChange={setDownPayment}
+                onTermChange={setTermMonths}
+                onRateChange={setMonthlyRate}
+                onCurrencyChange={setCurrency}
+                onFrequencyChange={setFrequency}
+                onCommissionTypeChange={setCommissionType}
+                onCommissionValueChange={setCommissionValue}
                 annualRate={annualRate}
                 onAmountChange={setAmount}
                 onDownPaymentChange={setDownPayment}
@@ -143,6 +249,8 @@ const Index = () => {
 
           {/* Results Section */}
           <div className="space-y-8 lg:col-span-3">
+            {/* Summary Cards */}
+            <LoanSummaryCard summary={summary} currency={currency} frequency={frequency} />
             <Card className="border-dashed">
               <CardHeader>
                 <CardTitle className="text-lg">Exportación</CardTitle>
@@ -184,6 +292,11 @@ const Index = () => {
                   comparisons={termComparisons}
                   selectedTerm={termMonths}
                   onSelectTerm={setTermMonths}
+                  currency={currency}
+                />
+              </TabsContent>
+              <TabsContent value="table" className="mt-6">
+                <AmortizationTable data={amortization} currency={currency} />
                 />
               </TabsContent>
               <TabsContent value="table" className="mt-6">
@@ -194,6 +307,7 @@ const Index = () => {
                   data={amortization}
                   totalPrincipal={summary.effectiveAmount}
                   totalInterest={summary.totalInterest}
+                  currency={currency}
                 />
               </TabsContent>
             </Tabs>
@@ -208,6 +322,7 @@ const Index = () => {
             © 2024 FIVESA. Todos los derechos reservados.
           </p>
           <p className="mt-2 text-xs text-muted-foreground">
+            * Este simulador es solo una referencia. Las condiciones finales del crédito
             * Este simulador es solo una referencia. Las condiciones finales del crédito 
             pueden variar según tu perfil crediticio y las políticas vigentes.
           </p>
@@ -217,4 +332,5 @@ const Index = () => {
   );
 };
 
+export default Simulator;
 export default Index;

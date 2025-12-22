@@ -5,12 +5,14 @@ interface TermComparisonProps {
   comparisons: { term: number; summary: LoanSummary }[];
   selectedTerm: number;
   onSelectTerm: (term: number) => void;
+  currency: "NIO" | "USD";
 }
 
 const TermComparison = ({
   comparisons,
   selectedTerm,
   onSelectTerm,
+  currency,
 }: TermComparisonProps) => {
   return (
     <div className="rounded-xl border border-border bg-card p-6 shadow-md">
@@ -18,10 +20,12 @@ const TermComparison = ({
         Comparar Plazos
       </h3>
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {comparisons.map(({ term, summary }, index) => {
+        {comparisons.map(({ term, summary }) => {
           const isSelected = term === selectedTerm;
-          const isBestMonthly = comparisons.every(
-            (c) => summary.monthlyPayment <= c.summary.monthlyPayment || c.term === term
+          const isBestPayment = comparisons.every(
+            (c) =>
+              summary.paymentPerPeriod <= c.summary.paymentPerPeriod ||
+              c.term === term
           );
           const isBestTotal =
             summary.totalPayment ===
@@ -48,27 +52,32 @@ const TermComparison = ({
               </div>
               <div className="space-y-2">
                 <div>
-                  <p className="text-xs text-muted-foreground">Pago Mensual</p>
+                  <p className="text-xs text-muted-foreground">Cuota</p>
                   <p className="text-lg font-semibold text-accent">
-                    {formatCurrency(summary.monthlyPayment)}
+                    {formatCurrency(summary.paymentPerPeriod, currency)}
                   </p>
                 </div>
                 <div>
                   <p className="text-xs text-muted-foreground">Total a Pagar</p>
                   <p className="font-medium text-foreground">
-                    {formatCurrency(summary.totalPayment)}
+                    {formatCurrency(summary.totalPayment, currency)}
                   </p>
                 </div>
                 <div>
                   <p className="text-xs text-muted-foreground">Intereses</p>
                   <p className="text-sm text-muted-foreground">
-                    {formatCurrency(summary.totalInterest)}
+                    {formatCurrency(summary.totalInterest, currency)}
                   </p>
                 </div>
               </div>
               {isBestTotal && term !== comparisons[0].term && (
                 <span className="mt-2 inline-block rounded-full bg-secondary/10 px-2 py-0.5 text-xs font-medium text-secondary">
                   Menor costo total
+                </span>
+              )}
+              {isBestPayment && (
+                <span className="mt-2 inline-block rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">
+                  Menor cuota
                 </span>
               )}
             </button>
