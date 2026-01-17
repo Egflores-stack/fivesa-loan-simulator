@@ -109,7 +109,7 @@ const Login = () => {
                 Desarrollado por Cloudix Technologies
               </p>
               <p className="text-xs text-gray-600 mt-1">
-                Patente CLX-CREDIA-2024 • Certificación ISO 27001
+                Patente CLX-CREDIA-2026 • Certificación ISO 27001
               </p>
             </div>
           </div>
@@ -147,7 +147,7 @@ const Login = () => {
                   <span className="bg-gray-100 p-1 rounded">
                     <Building className="h-3.5 w-3.5 text-gray-600" />
                   </span>
-                  Usuario Institucional
+                  Usuario
                 </Label>
                 <div className="relative">
                   <Input
@@ -257,7 +257,7 @@ const Login = () => {
                 <span className="text-cyan-600 font-medium mx-1">Cloudix Technologies</span>
               </p>
               <p className="text-[10px] text-gray-400 mt-1">
-                Patente CLX-CREDIA-2024-001 • Todos los derechos reservados
+                Patente CLX-CREDIA-2026-001 • Todos los derechos reservados
               </p>
             </div>
           </CardFooter>

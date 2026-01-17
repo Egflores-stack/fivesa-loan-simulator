@@ -1,4 +1,4 @@
-// App.tsx - Agregar useEffect para título
+// App.tsx - Versión completa
 import { useEffect } from "react";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
@@ -11,15 +11,30 @@ import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
 import Simulator from "./pages/Simulator";
 import Requests from "./pages/Requests";
+import Config from "./pages/Config";
 import { AuthProvider } from "@/hooks/useAuth";
 import ProtectedRoute from "./components/ProtectedRoute";
 
-const queryClient = new QueryClient();
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      retry: 1,
+      refetchOnWindowFocus: false,
+    },
+  },
+});
 
 const App = () => {
-  // Cambiar título de la página
+  // Configuración inicial
   useEffect(() => {
+    // Título de la página
     document.title = "Credia - Sistema de Simulación Crediticia";
+    
+    // Favicon dinámico (opcional)
+    const favicon = document.querySelector("link[rel*='icon']") as HTMLLinkElement;
+    if (favicon) {
+      favicon.href = "/favicon.ico";
+    }
   }, []);
 
   return (
@@ -30,8 +45,13 @@ const App = () => {
         <AuthProvider>
           <BrowserRouter>
             <Routes>
+              {/* Ruta raíz con pantalla de carga inteligente */}
               <Route path="/" element={<Index />} />
+              
+              {/* Ruta de login pública */}
               <Route path="/login" element={<Login />} />
+              
+              {/* Rutas protegidas */}
               <Route
                 path="/dashboard"
                 element={
@@ -40,6 +60,7 @@ const App = () => {
                   </ProtectedRoute>
                 }
               />
+              
               <Route
                 path="/simulator"
                 element={
@@ -48,6 +69,7 @@ const App = () => {
                   </ProtectedRoute>
                 }
               />
+              
               <Route
                 path="/requests"
                 element={
@@ -56,7 +78,17 @@ const App = () => {
                   </ProtectedRoute>
                 }
               />
-              {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
+              
+              <Route
+                path="/config"
+                element={
+                  <ProtectedRoute>
+                    <Config />
+                  </ProtectedRoute>
+                }
+              />
+              
+              {/* Ruta 404 - DEBE SER LA ÚLTIMA */}
               <Route path="*" element={<NotFound />} />
             </Routes>
           </BrowserRouter>

@@ -282,3 +282,53 @@
          text-[hsl(var(--credia-blue))] font-medium px-3 py-1 rounded-full 
          border border-[hsl(var(--credia-blue)/0.2)];
 }
+
+/* Agrega al final de tu index.css existente */
+
+/* Animaciones para la pantalla de carga */
+@keyframes pulse-subtle {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.7;
+  }
+}
+
+.animate-pulse {
+  animation: pulse-subtle 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-in {
+  animation: fade-in 0.6s ease-out forwards;
+}
+
+/* Animación de puntos suspensivos */
+@keyframes dots {
+  0%, 20% {
+    content: ".";
+  }
+  40% {
+    content: "..";
+  }
+  60%, 100% {
+    content: "...";
+  }
+}
+
+.loading-dots::after {
+  content: "...";
+  animation: dots 1.5s steps(1, end) infinite;
+}
+/* Fin de las adiciones para la pantalla de carga */
