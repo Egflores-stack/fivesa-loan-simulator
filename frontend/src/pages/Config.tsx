@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
-import { useAuth } from "@/hooks/use-auth";
+import { useAuth } from "@/hooks/useAuth";
 import { toast } from "@/hooks/use-toast";
 import {
   createUser,
@@ -47,7 +47,10 @@ import {
 } from "@/components/ui/dialog";
 import { Separator } from "@/components/ui/separator";
 
-const roles = ["Administrador", "Asesor"] as const;
+// Definir tipo para roles
+type UserRole = "Administrador" | "Asesor";
+
+const roles: UserRole[] = ["Administrador", "Asesor"];
 
 const defaultParameters: Parameters = {
   diasMoraVencido: 0,
@@ -61,13 +64,24 @@ const Config = () => {
   const [loading, setLoading] = useState(true);
   const [savingParameters, setSavingParameters] = useState(false);
   const [creatingUser, setCreatingUser] = useState(false);
-  const [userForm, setUserForm] = useState({
+  
+  // Tipar explícitamente el estado
+  const [userForm, setUserForm] = useState<{
+    email: string;
+    role: UserRole;
+    password: string;
+  }>({
     email: "",
-    role: roles[1],
+    role: "Asesor", // Valor por defecto
     password: "",
   });
+  
   const [editingUser, setEditingUser] = useState<ConfigUser | null>(null);
-  const [editForm, setEditForm] = useState({ email: "", role: "", password: "" });
+  const [editForm, setEditForm] = useState<{
+    email: string;
+    role: string;
+    password: string;
+  }>({ email: "", role: "", password: "" });
 
   const isAdmin = user?.role === "Administrador";
 
@@ -131,7 +145,7 @@ const Config = () => {
     try {
       const createdUser = await createUser(userForm, token);
       setUsers((prev) => [createdUser, ...prev]);
-      setUserForm({ email: "", role: roles[1], password: "" });
+      setUserForm({ email: "", role: "Asesor", password: "" });
       toast({ title: "Usuario creado" });
     } catch (error) {
       toast({
@@ -146,7 +160,11 @@ const Config = () => {
 
   const openEditDialog = (configUser: ConfigUser) => {
     setEditingUser(configUser);
-    setEditForm({ email: configUser.email, role: configUser.role, password: "" });
+    setEditForm({ 
+      email: configUser.email, 
+      role: configUser.role, 
+      password: "" 
+    });
   };
 
   const handleUpdateUser = async () => {
@@ -299,7 +317,10 @@ const Config = () => {
                     <Select
                       value={userForm.role}
                       onValueChange={(value) =>
-                        setUserForm((prev) => ({ ...prev, role: value }))
+                        setUserForm((prev) => ({ 
+                          ...prev, 
+                          role: value as UserRole 
+                        }))
                       }
                     >
                       <SelectTrigger>
@@ -410,7 +431,10 @@ const Config = () => {
                                         <Select
                                           value={editForm.role}
                                           onValueChange={(value) =>
-                                            setEditForm((prev) => ({ ...prev, role: value }))
+                                            setEditForm((prev) => ({ 
+                                              ...prev, 
+                                              role: value 
+                                            }))
                                           }
                                         >
                                           <SelectTrigger>
