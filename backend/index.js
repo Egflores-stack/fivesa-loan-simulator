@@ -1,0 +1,82 @@
+import express from 'express';
+import dotenv from 'dotenv';
+import cors from 'cors';
+import { testConnection } from './db.js';
+import { register, login, getProfile, verifyToken } from './auth.js';
+
+// Importar nuevos controladores
+import { 
+    registerClient, 
+    getAllClients, 
+    getClientById, 
+    updateClient 
+} from './controllers/clientController.js';
+
+import { 
+    calculateLoan, 
+    createLoan, 
+    approveLoan, 
+    getAllLoans, 
+    getLoanDetails 
+} from './controllers/loanController.js';
+
+import { getDashboardStats } from './controllers/dashboardController.js';
+
+dotenv.config();
+
+const app = express();
+const PORT = process.env.PORT || 3000;
+
+// Middleware
+app.use(cors());
+app.use(express.json());
+
+// Probar conexión a la base de datos
+testConnection();
+
+// ===== RUTAS PÚBLICAS =====
+app.post('/api/auth/register', register);
+app.post('/api/auth/login', login);
+
+// ===== RUTAS PROTEGIDAS (requieren token) =====
+
+// Dashboard
+app.get('/api/dashboard/stats', verifyToken, getDashboardStats);
+
+// Clientes
+app.post('/api/clients', verifyToken, registerClient);
+app.get('/api/clients', verifyToken, getAllClients);
+app.get('/api/clients/:id', verifyToken, getClientById);
+app.put('/api/clients/:id', verifyToken, updateClient);
+
+// Préstamos
+app.post('/api/loans/calculate', verifyToken, calculateLoan);
+app.post('/api/loans', verifyToken, createLoan);
+app.put('/api/loans/:id/approve', verifyToken, approveLoan);
+app.get('/api/loans', verifyToken, getAllLoans);
+app.get('/api/loans/:id', verifyToken, getLoanDetails);
+
+// Perfil de usuario
+app.get('/api/auth/profile', verifyToken, getProfile);
+
+// ===== RUTA DE PRUEBA =====
+app.get('/', (req, res) => {
+    res.json({ 
+        message: 'CREDIA - Sistema de Gestión de Préstamos',
+        version: '1.0.0',
+        status: 'online',
+        endpoints: {
+            auth: ['/api/auth/register', '/api/auth/login'],
+            dashboard: ['/api/dashboard/stats'],
+            clients: ['/api/clients', '/api/clients/:id'],
+            loans: ['/api/loans', '/api/loans/:id', '/api/loans/calculate']
+        }
+    });
+});
+
+// ===== INICIAR SERVIDOR =====
+app.listen(PORT, () => {
+    console.log(`🚀 Servidor CREDIA corriendo en http://localhost:${PORT}`);
+    console.log(`📊 Sistema de Gestión de Préstamos`);
+    console.log(`👉 Prueba el login: POST http://localhost:${PORT}/api/auth/login`);
+});

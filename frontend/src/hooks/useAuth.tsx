@@ -1,4 +1,4 @@
-import {
+﻿import {
   createContext,
   useContext,
   useEffect,
@@ -23,7 +23,7 @@ type AuthContextValue = {
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
-const AUTH_STORAGE_KEY = "fivesa.auth.token";
+const AUTH_STORAGE_KEY = "authToken";
 
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<PostgresUser | null>(null);
@@ -63,7 +63,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const logout = async () => {
-    await logoutFromPostgres(token ?? undefined);
+    await logoutFromPostgres();
     setUser(null);
     setToken(null);
     localStorage.removeItem(AUTH_STORAGE_KEY);

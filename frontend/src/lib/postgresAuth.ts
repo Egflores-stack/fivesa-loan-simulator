@@ -1,60 +1,56 @@
-export type PostgresUser = {
-  id: string;
+﻿// src/lib/postgresAuth.ts
+export interface PostgresUser {
+  id: number;
   email: string;
+  first_name?: string;
+  last_name?: string;
+  full_name?: string;
   role: string;
-};
+  created_at?: string;
+}
 
-type LoginCredentials = {
+// Configuracion de la API
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
+
+// Funcion para login
+export const loginWithPostgres = async (credentials: {
   email: string;
   password: string;
-};
-
-type AuthResponse = {
-  token: string;
-  user: PostgresUser;
-};
-
-const API_BASE_URL =
-  import.meta.env.VITE_API_BASE_URL || "http://localhost:3001";
-
-export const loginWithPostgres = async ({
-  email,
-  password,
-}: LoginCredentials): Promise<AuthResponse> => {
-  const response = await fetch(`${API_BASE_URL}/api/auth/login`, {
-    method: "POST",
+}): Promise<{ token: string; user: PostgresUser }> => {
+  const response = await fetch(`${API_URL}/auth/login`, {
+    method: 'POST',
     headers: {
-      "Content-Type": "application/json",
+      'Content-Type': 'application/json',
     },
-    body: JSON.stringify({ email, password }),
+    body: JSON.stringify(credentials),
   });
 
   if (!response.ok) {
-    const errorBody = await response.json().catch(() => ({}));
-    throw new Error(errorBody.message || "No se pudo iniciar sesión.");
+    const error = await response.json().catch(() => ({ message: 'Error en el login' }));
+    throw new Error(error.message || 'Error en el login');
   }
 
-  return (await response.json()) as AuthResponse;
+  const data = await response.json();
+  return { token: data.token, user: data.user };
 };
 
+// Funcion para obtener usuario actual
 export const getCurrentUser = async (token: string): Promise<PostgresUser> => {
-  const response = await fetch(`${API_BASE_URL}/api/auth/me`, {
+  const response = await fetch(`${API_URL}/auth/profile`, {
     headers: {
-      Authorization: `Bearer ${token}`,
+      'Authorization': `Bearer ${token}`,
     },
   });
 
   if (!response.ok) {
-    throw new Error("Sesión inválida.");
+    throw new Error('No autorizado');
   }
 
-  const data = (await response.json()) as { user: PostgresUser };
+  const data = await response.json();
   return data.user;
 };
 
-export const logoutFromPostgres = async (token?: string): Promise<void> => {
-  await fetch(`${API_BASE_URL}/api/auth/logout`, {
-    method: "POST",
-    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-  }).catch(() => undefined);
+// Funcion para logout (el backend no expone logout, se maneja local)
+export const logoutFromPostgres = async (): Promise<void> => {
+  return;
 };

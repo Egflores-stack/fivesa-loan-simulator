@@ -1,6 +1,8 @@
 // pages/Dashboard.tsx
 import React, { useState, useEffect } from 'react';
-import { useAuth } from '@/hooks/useAuth'; // Asegúrate que la ruta sea correcta
+import { useAuth } from '@/hooks/useAuth';
+import { getDashboardStats } from '@/lib/dashboardApi';
+import { toast } from '@/hooks/use-toast';
 import { 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, 
   PieChart, Pie, Cell, ResponsiveContainer
@@ -15,50 +17,41 @@ import {
   AlertCircle,
   Download,
   Filter,
-  Calendar
+  Calendar,
+  RefreshCw
 } from 'lucide-react';
 
 const Dashboard = () => {
   const { user, logout } = useAuth();
   const [timeRange, setTimeRange] = useState('month');
   const [loading, setLoading] = useState(true);
+  const [data, setData] = useState({
+    statsCards: [],
+    loanRequestsData: [],
+    loanAmountsData: [],
+    recentRequests: []
+  });
 
-  // Datos de ejemplo para gráficos
-  const loanRequestsData = [
-    { month: 'Ene', aprobados: 12, rechazados: 3, pendientes: 5 },
-    { month: 'Feb', aprobados: 15, rechazados: 2, pendientes: 4 },
-    { month: 'Mar', aprobados: 18, rechazados: 1, pendientes: 6 },
-    { month: 'Abr', aprobados: 22, rechazados: 4, pendientes: 3 },
-    { month: 'May', aprobados: 25, rechazados: 2, pendientes: 7 },
-  ];
-
-  const loanAmountsData = [
-    { name: 'Personal', value: 35, color: '#0088FE' },
-    { name: 'Hipotecario', value: 25, color: '#00C49F' },
-    { name: 'Automotriz', value: 20, color: '#FFBB28' },
-    { name: 'Negocios', value: 15, color: '#FF8042' },
-    { name: 'Educación', value: 5, color: '#8884D8' },
-  ];
-
-  const recentRequests = [
-    { id: 1, cliente: 'Juan Pérez', monto: 15000, plazo: '24 meses', fecha: '2024-01-15', estado: 'aprobado' },
-    { id: 2, cliente: 'María García', monto: 50000, plazo: '60 meses', fecha: '2024-01-14', estado: 'pendiente' },
-    { id: 3, cliente: 'Carlos López', monto: 25000, plazo: '36 meses', fecha: '2024-01-13', estado: 'rechazado' },
-    { id: 4, cliente: 'Ana Martínez', monto: 35000, plazo: '48 meses', fecha: '2024-01-12', estado: 'aprobado' },
-    { id: 5, cliente: 'Pedro Sánchez', monto: 20000, plazo: '24 meses', fecha: '2024-01-11', estado: 'pendiente' },
-  ];
-
-  const statsCards = [
-    { title: 'Total Solicitudes', value: '156', icon: <FileText />, change: '+12%', color: 'blue' },
-    { title: 'Clientes Activos', value: '89', icon: <Users />, change: '+5%', color: 'green' },
-    { title: 'Monto Total', value: '$2.4M', icon: <DollarSign />, change: '+18%', color: 'purple' },
-    { title: 'Tasa Aprobación', value: '78%', icon: <TrendingUp />, change: '+3%', color: 'orange' },
-  ];
+  const loadData = async () => {
+    try {
+      setLoading(true);
+      const dashboardData = await getDashboardStats();
+      setData(dashboardData);
+    } catch (error) {
+      console.error('Error cargando datos del dashboard:', error);
+      toast({
+        title: "Error",
+        description: "No se pudieron cargar los datos del dashboard",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    // Simular carga de datos
-    setTimeout(() => setLoading(false), 1000);
-  }, []);
+    loadData();
+  }, [timeRange]);
 
   if (loading) {
     return (
@@ -99,6 +92,15 @@ const Dashboard = () => {
             </div>
             
             <button 
+              className="flex items-center space-x-2 bg-gray-600 text-white px-4 py-2 rounded-lg hover:bg-gray-700 transition"
+              onClick={() => loadData()}
+              disabled={loading}
+            >
+              <RefreshCw size={18} className={loading ? "animate-spin" : ""} />
+              <span>Refrescar</span>
+            </button>
+            
+            <button 
               className="flex items-center space-x-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition"
               onClick={() => logout()}
             >
@@ -111,7 +113,7 @@ const Dashboard = () => {
 
       {/* Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-        {statsCards.map((card, index) => (
+        {data.statsCards.map((card, index) => (
           <div key={index} className="bg-white rounded-xl shadow p-6">
             <div className="flex items-center justify-between">
               <div>
@@ -123,14 +125,14 @@ const Dashboard = () => {
                 </p>
               </div>
               <div className={`p-3 rounded-full bg-${card.color}-100 text-${card.color}-600`}>
-                {card.icon}
+                {getIcon(card.icon)}
               </div>
             </div>
           </div>
         ))}
       </div>
 
-      {/* Charts Grid */}
+{/* Charts Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
         {/* Gráfico de barras - Solicitudes por mes */}
         <div className="bg-white rounded-xl shadow p-6">
@@ -139,7 +141,7 @@ const Dashboard = () => {
             <Filter size={18} className="text-gray-400 cursor-pointer" />
           </div>
           <ResponsiveContainer width="100%" height={300}>
-            <BarChart data={loanRequestsData}>
+            <BarChart data={data.loanRequestsData}>
               <CartesianGrid strokeDasharray="3 3" />
               <XAxis dataKey="month" />
               <YAxis />
@@ -158,7 +160,7 @@ const Dashboard = () => {
           <ResponsiveContainer width="100%" height={300}>
             <PieChart>
               <Pie
-                data={loanAmountsData}
+                data={data.loanAmountsData}
                 cx="50%"
                 cy="50%"
                 labelLine={false}
@@ -167,7 +169,7 @@ const Dashboard = () => {
                 fill="#8884d8"
                 dataKey="value"
               >
-                {loanAmountsData.map((entry, index) => (
+                {data.loanAmountsData.map((entry, index) => (
                   <Cell key={`cell-${index}`} fill={entry.color} />
                 ))}
               </Pie>
@@ -213,7 +215,7 @@ const Dashboard = () => {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200">
-              {recentRequests.map((request) => (
+              {data.recentRequests.map((request) => (
                 <tr key={request.id} className="hover:bg-gray-50">
                   <td className="px-6 py-4">
                     <div className="font-medium text-gray-900">{request.cliente}</div>
@@ -287,6 +289,17 @@ const Dashboard = () => {
       </div>
     </div>
   );
+};
+
+// Función para obtener el icono correcto
+const getIcon = (iconName) => {
+  const icons = {
+    FileText: <FileText />,
+    Users: <Users />,
+    DollarSign: <DollarSign />,
+    TrendingUp: <TrendingUp />
+  };
+  return icons[iconName] || <FileText />;
 };
 
 export default Dashboard;

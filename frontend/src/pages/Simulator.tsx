@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
+import { useAuth } from "@/hooks/useAuth";
 import Header from "@/components/Header";
 import LoanForm from "@/components/LoanForm";
 import LoanSummaryCard from "@/components/LoanSummaryCard";
@@ -8,6 +9,11 @@ import LoanChart from "@/components/LoanChart";
 import TermComparison from "@/components/TermComparison";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
 import {
   calculateLoan,
   compareTerms,
@@ -15,9 +21,15 @@ import {
   type CommissionType,
   type PaymentFrequency,
 } from "@/lib/loanCalculations";
+import { createLoan } from "@/lib/dashboardApi";
+import { toast } from "@/hooks/use-toast";
 import { BarChart3, Calculator, GitCompare, Table } from "lucide-react";
 
 const Simulator = () => {
+  const navigate = useNavigate();
+  const { user } = useAuth();
+  const [loading, setLoading] = useState(false);
+  const [showClientDialog, setShowClientDialog] = useState(false);
   const [amount, setAmount] = useState(100000);
   const [downPayment, setDownPayment] = useState(10000);
   const [termMonths, setTermMonths] = useState(24);
@@ -26,6 +38,15 @@ const Simulator = () => {
   const [frequency, setFrequency] = useState<PaymentFrequency>("monthly");
   const [commissionType, setCommissionType] = useState<CommissionType>("percentage");
   const [commissionValue, setCommissionValue] = useState(2);
+  const [clientData, setClientData] = useState({
+    first_name: '',
+    last_name: '',
+    email: '',
+    phone: '',
+    dpi: '',
+    monthly_income: '',
+    loan_purpose: ''
+  });
 
   const summary = useMemo(
     () =>
@@ -68,6 +89,101 @@ const Simulator = () => {
       ),
     [amount, downPayment, monthlyRate, frequency, commissionType, commissionValue]
   );
+
+  const handleLoanRequest = async () => {
+    if (!user) {
+      toast({
+        title: "Error",
+        description: "Debes estar autenticado para solicitar un crédito",
+        variant: "destructive",
+      });
+      navigate('/login');
+      return;
+    }
+
+    // Verificar si tenemos datos del cliente
+    if (!clientData.first_name || !clientData.last_name || !clientData.email) {
+      setShowClientDialog(true);
+      return;
+    }
+
+    await submitLoanRequest();
+  };
+
+  const submitLoanRequest = async () => {
+    try {
+      setLoading(true);
+      
+      // Primero crear el cliente
+      const clientResponse = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:3000/api'}/clients`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('authToken')}`
+        },
+        body: JSON.stringify({
+          first_name: clientData.first_name,
+          last_name: clientData.last_name,
+          email: clientData.email,
+          phone: clientData.phone,
+          dpi: clientData.dpi,
+          monthly_income: parseFloat(clientData.monthly_income) || 0,
+          employment_status: 'employed'
+        })
+      });
+
+      if (!clientResponse.ok) {
+        throw new Error('Error al crear el cliente');
+      }
+
+      const clientResult = await clientResponse.json();
+      
+      // Luego crear la solicitud de préstamo
+      const loanData = {
+        clientId: clientResult.client?.id || 1, // Usar cliente creado o ID por defecto
+        loanType: 'personal',
+        amountRequested: amount,
+        downPayment: downPayment,
+        termMonths: termMonths,
+        annualInterestRate: monthlyRate * 12,
+        monthlyPayment: summary.payment,
+        commissionType: commissionType,
+        commissionValue: commissionValue,
+        paymentFrequency: frequency,
+        currency: currency,
+        purpose: clientData.loan_purpose || 'Solicitud de crédito personal'
+      };
+
+      const loanResponse = await createLoan(loanData);
+
+      toast({
+        title: "¡Solicitud Enviada!",
+        description: "Tu solicitud de crédito ha sido enviada exitosamente y está pendiente de aprobación.",
+      });
+
+      // Resetear formulario
+      setClientData({
+        first_name: '',
+        last_name: '',
+        email: '',
+        phone: '',
+        dpi: '',
+        monthly_income: '',
+        loan_purpose: ''
+      });
+      setShowClientDialog(false);
+      
+    } catch (error) {
+      console.error('Error en solicitud:', error);
+      toast({
+        title: "Error",
+        description: "No se pudo procesar tu solicitud. Por favor intenta nuevamente.",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-background">
@@ -134,8 +250,14 @@ const Simulator = () => {
                 onCommissionValueChange={setCommissionValue}
               />
               <div className="mt-8">
-                <Button variant="accent" size="xl" className="w-full">
-                  Solicitar Crédito
+                <Button 
+                  variant="accent" 
+                  size="xl" 
+                  className="w-full"
+                  onClick={handleLoanRequest}
+                  disabled={loading}
+                >
+                  {loading ? 'Procesando...' : 'Solicitar Crédito'}
                 </Button>
               </div>
             </div>
@@ -194,6 +316,105 @@ const Simulator = () => {
           </p>
         </div>
       </footer>
+
+      {/* Dialog para datos del cliente */}
+      <Dialog open={showClientDialog} onOpenChange={setShowClientDialog}>
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader>
+            <DialogTitle>Completa tus datos para continuar</DialogTitle>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="first_name">Nombre</Label>
+                <Input
+                  id="first_name"
+                  value={clientData.first_name}
+                  onChange={(e) => setClientData(prev => ({ ...prev, first_name: e.target.value }))}
+                  placeholder="Juan"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="last_name">Apellido</Label>
+                <Input
+                  id="last_name"
+                  value={clientData.last_name}
+                  onChange={(e) => setClientData(prev => ({ ...prev, last_name: e.target.value }))}
+                  placeholder="Pérez"
+                />
+              </div>
+            </div>
+            
+            <div className="space-y-2">
+              <Label htmlFor="email">Email</Label>
+              <Input
+                id="email"
+                type="email"
+                value={clientData.email}
+                onChange={(e) => setClientData(prev => ({ ...prev, email: e.target.value }))}
+                placeholder="juan.perez@email.com"
+              />
+            </div>
+            
+            <div className="space-y-2">
+              <Label htmlFor="phone">Teléfono</Label>
+              <Input
+                id="phone"
+                value={clientData.phone}
+                onChange={(e) => setClientData(prev => ({ ...prev, phone: e.target.value }))}
+                placeholder="5555-1234"
+              />
+            </div>
+            
+            <div className="space-y-2">
+              <Label htmlFor="dpi">DPI/Cédula</Label>
+              <Input
+                id="dpi"
+                value={clientData.dpi}
+                onChange={(e) => setClientData(prev => ({ ...prev, dpi: e.target.value }))}
+                placeholder="1234567890101"
+              />
+            </div>
+            
+            <div className="space-y-2">
+              <Label htmlFor="monthly_income">Ingreso Mensual (C$)</Label>
+              <Input
+                id="monthly_income"
+                type="number"
+                value={clientData.monthly_income}
+                onChange={(e) => setClientData(prev => ({ ...prev, monthly_income: e.target.value }))}
+                placeholder="15000"
+              />
+            </div>
+            
+            <div className="space-y-2">
+              <Label htmlFor="loan_purpose">Propósito del Préstamo</Label>
+              <Textarea
+                id="loan_purpose"
+                value={clientData.loan_purpose}
+                onChange={(e) => setClientData(prev => ({ ...prev, loan_purpose: e.target.value }))}
+                placeholder="Describe para qué necesitas el crédito..."
+                rows={3}
+              />
+            </div>
+          </div>
+          
+          <div className="flex justify-end space-x-2">
+            <Button 
+              variant="outline" 
+              onClick={() => setShowClientDialog(false)}
+            >
+              Cancelar
+            </Button>
+            <Button 
+              onClick={submitLoanRequest}
+              disabled={loading || !clientData.first_name || !clientData.last_name || !clientData.email}
+            >
+              {loading ? 'Procesando...' : 'Enviar Solicitud'}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

@@ -1,4 +1,4 @@
-// pages/Login.tsx
+﻿// pages/Login.tsx
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
@@ -7,10 +7,10 @@ import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { AlertCircle, LogIn, Shield, Building, Calculator, TrendingUp, Cloud, Key, Banknote } from 'lucide-react';
+import { AlertCircle, LogIn, Shield, Building, Calculator, TrendingUp, Cloud, Key, Banknote, Mail } from 'lucide-react';
 
 const Login = () => {
-  const [username, setUsername] = useState('asesor');
+  const [email, setEmail] = useState('admin@credia.com');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -23,12 +23,10 @@ const Login = () => {
     setError('');
 
     try {
-      // Usar username directamente o convertirlo según tu backend
-      const loginEmail = username.includes('@') ? username : `${username}@credia.sv`;
-      await login(loginEmail, password);
+      await login(email, password);
       navigate('/dashboard');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Usuario o contraseña incorrectos');
+      setError('Credenciales invalidas');
     } finally {
       setLoading(false);
     }
@@ -55,15 +53,15 @@ const Login = () => {
                 </span>
               </h1>
               <p className="text-lg font-medium text-gray-700 mt-1">
-                Sistema de Simulación Crediticia
+                Sistema de Simulacion Crediticia
               </p>
               <p className="text-sm text-gray-500 mt-1">
-                Plataforma Cloudix • Versión 3.0
+                Plataforma Cloudix • Version 3.0
               </p>
             </div>
           </div>
           <p className="text-lg text-gray-600 mb-6 border-l-4 border-cyan-500 pl-4 py-1">
-            Solución integral para análisis y simulación de productos crediticios
+            Solucion integral para analisis y simulacion de productos crediticios
           </p>
         </div>
 
@@ -73,8 +71,8 @@ const Login = () => {
               <Calculator className="h-7 w-7 text-cyan-600" />
             </div>
             <div>
-              <h3 className="font-semibold text-gray-900 mb-1 text-lg">Simulación Previa</h3>
-              <p className="text-gray-600">Cálculos precisos de tasas, plazos y cuotas en tiempo real</p>
+              <h3 className="font-semibold text-gray-900 mb-1 text-lg">Simulacion Previa</h3>
+              <p className="text-gray-600">Calculos precisos de tasas, plazos y cuotas en tiempo real</p>
             </div>
           </div>
 
@@ -83,8 +81,8 @@ const Login = () => {
               <TrendingUp className="h-7 w-7 text-emerald-600" />
             </div>
             <div>
-              <h3 className="font-semibold text-gray-900 mb-1 text-lg">Dashboard Analítico</h3>
-              <p className="text-gray-600">Métricas financieras y reportes ejecutivos automatizados</p>
+              <h3 className="font-semibold text-gray-900 mb-1 text-lg">Dashboard Analitico</h3>
+              <p className="text-gray-600">Metricas financieras y reportes ejecutivos automatizados</p>
             </div>
           </div>
 
@@ -94,7 +92,7 @@ const Login = () => {
             </div>
             <div>
               <h3 className="font-semibold text-gray-900 mb-1 text-lg">Seguridad Garantizada</h3>
-              <p className="text-gray-600">Infraestructura Cloudix con encriptación AES-256</p>
+              <p className="text-gray-600">Infraestructura Cloudix con encriptacion AES-256</p>
             </div>
           </div>
         </div>
@@ -109,7 +107,7 @@ const Login = () => {
                 Desarrollado por Cloudix Technologies
               </p>
               <p className="text-xs text-gray-600 mt-1">
-                Patente CLX-CREDIA-2026 • Certificación ISO 27001
+                Patente CLX-CREDIA-2026 • Certificacion ISO 27001
               </p>
             </div>
           </div>
@@ -143,19 +141,19 @@ const Login = () => {
 
             <form onSubmit={handleLogin} className="space-y-5">
               <div className="space-y-2.5">
-                <Label htmlFor="username" className="text-gray-700 font-medium flex items-center gap-2">
+                <Label htmlFor="email" className="text-gray-700 font-medium flex items-center gap-2">
                   <span className="bg-gray-100 p-1 rounded">
-                    <Building className="h-3.5 w-3.5 text-gray-600" />
+                    <Mail className="h-3.5 w-3.5 text-gray-600" />
                   </span>
-                  Usuario
+                  Email
                 </Label>
                 <div className="relative">
                   <Input
-                    id="username"
-                    type="text"
-                    placeholder="Ingresa tu usuario"
-                    value={username}
-                    onChange={(e) => setUsername(e.target.value)}
+                    id="email"
+                    type="email"
+                    placeholder="admin@credia.com"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
                     required
                     className="h-12 pl-10 bg-gray-50 border-gray-300 focus:border-cyan-500 focus:ring-cyan-500"
                   />
@@ -164,7 +162,7 @@ const Login = () => {
                   </div>
                 </div>
                 <p className="text-xs text-gray-500">
-                  Usuario asignado por el administrador del sistema
+                  Usa tu correo corporativo
                 </p>
               </div>
 
@@ -174,21 +172,21 @@ const Login = () => {
                     <span className="bg-gray-100 p-1 rounded">
                       <Shield className="h-3.5 w-3.5 text-gray-600" />
                     </span>
-                    Contraseña de Acceso
+                    Contrasena de Acceso
                   </Label>
                   <Button
                     type="button"
                     variant="link"
                     className="px-0 text-cyan-600 hover:text-cyan-800 text-sm font-medium"
-                    onClick={() => alert('Contacte al administrador del sistema para restablecer su contraseña')}
+                    onClick={() => alert('Contacte al administrador del sistema para restablecer su contrasena')}
                   >
-                    ¿Contraseña olvidada?
+                    ¿Contrasena olvidada?
                   </Button>
                 </div>
                 <Input
                   id="password"
                   type="password"
-                  placeholder="Ingresa tu contraseña"
+                  placeholder="Ingresa tu contrasena"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   required
@@ -203,7 +201,7 @@ const Login = () => {
                   className="h-4 w-4 rounded border-gray-300 text-cyan-600 focus:ring-cyan-500"
                 />
                 <Label htmlFor="remember" className="text-sm font-normal text-gray-600">
-                  Mantener sesión activa
+                  Mantener sesion activa
                 </Label>
               </div>
 
@@ -249,7 +247,7 @@ const Login = () => {
             <div className="text-center w-full">
               <div className="inline-flex items-center gap-2 text-xs text-gray-500 mb-3">
                 <Shield className="h-3 w-3 text-green-500" />
-                <span>Conexión segura • SSL/TLS encriptado</span>
+                <span>Conexion segura • SSL/TLS encriptado</span>
                 <Shield className="h-3 w-3 text-green-500" />
               </div>
               <p className="text-xs text-gray-500">
@@ -267,7 +265,7 @@ const Login = () => {
           <div className="inline-flex items-center gap-2 text-sm text-gray-600 bg-gray-50 px-4 py-2.5 rounded-lg border border-gray-200">
             <Cloud className="h-4 w-4 text-cyan-500" />
             <span>
-              Soporte técnico:{' '}
+              Soporte tecnico:{' '}
               <Button
                 variant="link"
                 className="px-1 text-cyan-600 hover:text-cyan-800 text-sm font-medium"
