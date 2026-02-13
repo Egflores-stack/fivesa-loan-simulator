@@ -1,260 +1,275 @@
 import { query } from '../db.js';
 
-// Registrar nuevo cliente
+const normalizeClient = (row) => ({
+  ...row,
+  full_name: `${row.nombres} ${row.apellidos}`.trim(),
+  first_name: row.nombres,
+  last_name: row.apellidos,
+  dpi: row.identificacion,
+  monthly_income: row.ingreso_mensual,
+  phone: row.telefono,
+  birth_date: row.fecha_nacimiento,
+});
+
 export const registerClient = async (req, res) => {
-    try {
-        const userId = req.userId;
-        const {
-            first_name,
-            last_name,
-            email,
-            phone,
-            dpi,
-            birth_date,
-            address,
-            employment_status = 'employed',
-            monthly_income
-        } = req.body;
+  try {
+    const userId = req.userId;
+    const identificacion = req.body.identificacion ?? req.body.dpi;
+    const nombres = req.body.nombres ?? req.body.first_name;
+    const apellidos = req.body.apellidos ?? req.body.last_name;
 
-        // Validar que el DPI no exista
-        const existingDPI = await query(
-            'SELECT id FROM clients WHERE dpi = $1',
-            [dpi]
-        );
-
-        if (existingDPI.rows.length > 0) {
-            return res.status(400).json({
-                success: false,
-                message: 'Ya existe un cliente con este número de DPI'
-            });
-        }
-
-        // Validar que el email no exista (si se proporciona)
-        if (email) {
-            const existingEmail = await query(
-                'SELECT id FROM clients WHERE email = $1',
-                [email]
-            );
-
-            if (existingEmail.rows.length > 0) {
-                return res.status(400).json({
-                    success: false,
-                    message: 'Ya existe un cliente con este email'
-                });
-            }
-        }
-
-        const result = await query(
-            `INSERT INTO clients 
-             (first_name, last_name, email, phone, dpi, birth_date, address, 
-              employment_status, monthly_income, created_by) 
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) 
-             RETURNING id, first_name, last_name, email, phone, dpi, created_at`,
-            [first_name, last_name, email, phone, dpi, birth_date, address, 
-             employment_status, monthly_income, userId]
-        );
-
-        const client = result.rows[0];
-        client.full_name = `${client.first_name} ${client.last_name}`;
-
-        res.status(201).json({
-            success: true,
-            message: 'Cliente registrado exitosamente',
-            client
-        });
-
-    } catch (error) {
-        console.error('Error registrando cliente:', error);
-        res.status(500).json({
-            success: false,
-            message: 'Error registrando cliente',
-            error: error.message
-        });
+    if (!identificacion || !nombres || !apellidos) {
+      return res.status(400).json({
+        success: false,
+        message: 'identificacion, nombres y apellidos son obligatorios',
+      });
     }
+
+    const email = req.body.email ?? null;
+
+    const existingIdentification = await query(
+      'SELECT id FROM cl.clientes WHERE identificacion = $1',
+      [identificacion],
+    );
+
+    if (existingIdentification.rowCount > 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'Ya existe un cliente con esta identificacion',
+      });
+    }
+
+    if (email) {
+      const existingEmail = await query(
+        'SELECT id FROM cl.clientes WHERE email = $1',
+        [email],
+      );
+
+      if (existingEmail.rowCount > 0) {
+        return res.status(400).json({
+          success: false,
+          message: 'Ya existe un cliente con este email',
+        });
+      }
+    }
+
+    const result = await query(
+      `INSERT INTO cl.clientes
+       (identificacion, tipo_identificacion, nombres, apellidos, fecha_nacimiento, genero, telefono, email, direccion,
+        ocupacion, ingreso_mensual, estado_civil, asesor_id)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+       RETURNING id, identificacion, tipo_identificacion, nombres, apellidos, fecha_nacimiento, genero, telefono,
+                 email, direccion, ocupacion, ingreso_mensual, estado_civil, activo, creado_en, asesor_id`,
+      [
+        identificacion,
+        req.body.tipo_identificacion ?? 'DNI',
+        nombres,
+        apellidos,
+        req.body.fecha_nacimiento ?? req.body.birth_date ?? null,
+        req.body.genero ?? null,
+        req.body.telefono ?? req.body.phone ?? null,
+        email,
+        req.body.direccion ?? req.body.address ?? null,
+        req.body.ocupacion ?? req.body.employment_status ?? null,
+        req.body.ingreso_mensual ?? req.body.monthly_income ?? null,
+        req.body.estado_civil ?? null,
+        userId,
+      ],
+    );
+
+    res.status(201).json({
+      success: true,
+      message: 'Cliente registrado exitosamente',
+      client: normalizeClient(result.rows[0]),
+    });
+  } catch (error) {
+    console.error('Error registrando cliente:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error registrando cliente',
+      error: error.message,
+    });
+  }
 };
 
-// Obtener todos los clientes
 export const getAllClients = async (req, res) => {
-    try {
-        const { search = '', page = 1, limit = 20 } = req.query;
-        const offset = (page - 1) * limit;
+  try {
+    const search = (req.query.search ?? '').toString().trim();
+    const page = Math.max(1, parseInt(req.query.page, 10) || 1);
+    const limit = Math.min(100, Math.max(1, parseInt(req.query.limit, 10) || 20));
+    const offset = (page - 1) * limit;
 
-        let whereClause = 'WHERE 1=1';
-        let params = [];
-        let paramCount = 1;
-        
-        if (search) {
-            whereClause += ` AND (first_name ILIKE $${paramCount} OR 
-                              last_name ILIKE $${paramCount} OR 
-                              email ILIKE $${paramCount} OR 
-                              dpi ILIKE $${paramCount})`;
-            params.push(`%${search}%`);
-            paramCount++;
-        }
+    let whereClause = 'WHERE 1=1';
+    const params = [];
 
-        const clientsResult = await query(
-            `SELECT id, first_name, last_name, email, phone, dpi, birth_date,
-                    address, employment_status, monthly_income, created_at,
-                    (first_name || ' ' || last_name) as full_name
-             FROM clients 
-             ${whereClause}
-             ORDER BY created_at DESC 
-             LIMIT $${paramCount} OFFSET $${paramCount + 1}`,
-            [...params, limit, offset]
-        );
-
-        const countResult = await query(
-            `SELECT COUNT(*) as total FROM clients ${whereClause}`,
-            params
-        );
-
-        res.json({
-            success: true,
-            clients: clientsResult.rows,
-            pagination: {
-                page: parseInt(page),
-                limit: parseInt(limit),
-                total: parseInt(countResult.rows[0].total)
-            }
-        });
-
-    } catch (error) {
-        console.error('Error obteniendo clientes:', error);
-        res.status(500).json({
-            success: false,
-            message: 'Error obteniendo clientes',
-            error: error.message
-        });
+    if (search) {
+      params.push(`%${search}%`);
+      whereClause += ` AND (c.nombres ILIKE $${params.length} OR
+                           c.apellidos ILIKE $${params.length} OR
+                           c.email ILIKE $${params.length} OR
+                           c.identificacion ILIKE $${params.length})`;
     }
+
+    params.push(limit);
+    params.push(offset);
+
+    const clientsResult = await query(
+      `SELECT c.id, c.identificacion, c.tipo_identificacion, c.nombres, c.apellidos,
+              c.fecha_nacimiento, c.genero, c.telefono, c.email, c.direccion,
+              c.ocupacion, c.ingreso_mensual, c.estado_civil, c.activo, c.creado_en, c.asesor_id
+       FROM cl.clientes c
+       ${whereClause}
+       ORDER BY c.creado_en DESC
+       LIMIT $${params.length - 1} OFFSET $${params.length}`,
+      params,
+    );
+
+    const countParams = search ? [`%${search}%`] : [];
+    const countResult = await query(
+      `SELECT COUNT(*)::int AS total
+       FROM cl.clientes c
+       ${search
+         ? `WHERE c.nombres ILIKE $1 OR c.apellidos ILIKE $1 OR c.email ILIKE $1 OR c.identificacion ILIKE $1`
+         : ''}`,
+      countParams,
+    );
+
+    res.json({
+      success: true,
+      clients: clientsResult.rows.map(normalizeClient),
+      pagination: {
+        page,
+        limit,
+        total: countResult.rows[0].total,
+      },
+    });
+  } catch (error) {
+    console.error('Error obteniendo clientes:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error obteniendo clientes',
+      error: error.message,
+    });
+  }
 };
 
-// Obtener cliente por ID
 export const getClientById = async (req, res) => {
-    try {
-        const { id } = req.params;
-        
-        const result = await query(
-            `SELECT c.*, 
-                    u.first_name || ' ' || u.last_name as created_by_name
-             FROM clients c 
-             LEFT JOIN users u ON c.created_by = u.id 
-             WHERE c.id = $1`,
-            [id]
-        );
+  try {
+    const clientId = parseInt(req.params.id, 10);
 
-        if (result.rows.length === 0) {
-            return res.status(404).json({
-                success: false,
-                message: 'Cliente no encontrado'
-            });
-        }
+    const result = await query(
+      `SELECT c.*,
+              (u.nombres || ' ' || u.apellidos) AS asesor_nombre
+       FROM cl.clientes c
+       LEFT JOIN us.usuarios u ON u.id = c.asesor_id
+       WHERE c.id = $1`,
+      [clientId],
+    );
 
-        const client = result.rows[0];
-        client.full_name = `${client.first_name} ${client.last_name}`;
-
-        // Obtener préstamos del cliente
-        const loansResult = await query(
-            `SELECT id, loan_type, amount_requested, amount_approved, term_months, 
-                    annual_interest_rate, monthly_payment, status, created_at,
-                    approval_date
-             FROM loans 
-             WHERE client_id = $1 
-             ORDER BY created_at DESC`,
-            [id]
-        );
-
-        // Calcular estadísticas de préstamos
-        const loanStats = await query(
-            `SELECT 
-                COUNT(*) as total_loans,
-                COUNT(CASE WHEN status = 'approved' THEN 1 END) as approved_loans,
-                COUNT(CASE WHEN status = 'pending' THEN 1 END) as pending_loans,
-                COUNT(CASE WHEN status = 'rejected' THEN 1 END) as rejected_loans,
-                COALESCE(SUM(CASE WHEN status = 'approved' THEN amount_approved END), 0) as total_approved_amount
-             FROM loans 
-             WHERE client_id = $1`,
-            [id]
-        );
-
-        res.json({
-            success: true,
-            client,
-            loans: loansResult.rows,
-            loanStats: loanStats.rows[0]
-        });
-
-    } catch (error) {
-        console.error('Error obteniendo cliente:', error);
-        res.status(500).json({
-            success: false,
-            message: 'Error obteniendo cliente',
-            error: error.message
-        });
+    if (result.rowCount === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'Cliente no encontrado',
+      });
     }
+
+    const loansResult = await query(
+      `SELECT id, codigo, monto_solicitado, tasa_interes, plazo_meses,
+              tipo_credito, estado, fecha_solicitud, fecha_aprobacion
+       FROM op.creditos
+       WHERE cliente_id = $1
+       ORDER BY fecha_solicitud DESC`,
+      [clientId],
+    );
+
+    res.json({
+      success: true,
+      client: normalizeClient(result.rows[0]),
+      loans: loansResult.rows,
+    });
+  } catch (error) {
+    console.error('Error obteniendo cliente:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error obteniendo cliente',
+      error: error.message,
+    });
+  }
 };
 
-// Actualizar cliente
 export const updateClient = async (req, res) => {
-    try {
-        const { id } = req.params;
-        const updates = req.body;
-        
-        // Construir SET dinámicamente
-        const setClause = [];
-        const values = [];
-        let paramCount = 1;
+  try {
+    const clientId = parseInt(req.params.id, 10);
 
-        // Campos permitidos para actualizar
-        const allowedFields = ['first_name', 'last_name', 'email', 'phone', 'dpi', 
-                              'birth_date', 'address', 'employment_status', 'monthly_income'];
+    const fieldMap = {
+      identificacion: 'identificacion',
+      tipo_identificacion: 'tipo_identificacion',
+      nombres: 'nombres',
+      apellidos: 'apellidos',
+      fecha_nacimiento: 'fecha_nacimiento',
+      genero: 'genero',
+      telefono: 'telefono',
+      email: 'email',
+      direccion: 'direccion',
+      ocupacion: 'ocupacion',
+      ingreso_mensual: 'ingreso_mensual',
+      estado_civil: 'estado_civil',
+      activo: 'activo',
+      first_name: 'nombres',
+      last_name: 'apellidos',
+      phone: 'telefono',
+      monthly_income: 'ingreso_mensual',
+      birth_date: 'fecha_nacimiento',
+      dpi: 'identificacion',
+    };
 
-        for (const [key, value] of Object.entries(updates)) {
-            if (allowedFields.includes(key)) {
-                setClause.push(`${key} = $${paramCount}`);
-                values.push(value);
-                paramCount++;
-            }
-        }
+    const setClause = [];
+    const values = [];
 
-        if (setClause.length === 0) {
-            return res.status(400).json({
-                success: false,
-                message: 'No hay datos válidos para actualizar'
-            });
-        }
-
-        values.push(id); // Para el WHERE
-        setClause.push('updated_at = NOW()'); // Actualizar timestamp
-
-        const result = await query(
-            `UPDATE clients SET ${setClause.join(', ')} 
-             WHERE id = $${paramCount} 
-             RETURNING id, first_name, last_name, email, phone, dpi, updated_at`,
-            values
-        );
-
-        if (result.rowCount === 0) {
-            return res.status(404).json({
-                success: false,
-                message: 'Cliente no encontrado'
-            });
-        }
-
-        const client = result.rows[0];
-        client.full_name = `${client.first_name} ${client.last_name}`;
-
-        res.json({
-            success: true,
-            message: 'Cliente actualizado exitosamente',
-            client
-        });
-
-    } catch (error) {
-        console.error('Error actualizando cliente:', error);
-        res.status(500).json({
-            success: false,
-            message: 'Error actualizando cliente',
-            error: error.message
-        });
+    for (const [key, value] of Object.entries(req.body)) {
+      const column = fieldMap[key];
+      if (column) {
+        values.push(value);
+        setClause.push(`${column} = $${values.length}`);
+      }
     }
+
+    if (setClause.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'No hay datos validos para actualizar',
+      });
+    }
+
+    values.push(clientId);
+
+    const result = await query(
+      `UPDATE cl.clientes
+       SET ${setClause.join(', ')}
+       WHERE id = $${values.length}
+       RETURNING id, identificacion, tipo_identificacion, nombres, apellidos, fecha_nacimiento, genero, telefono,
+                 email, direccion, ocupacion, ingreso_mensual, estado_civil, activo, creado_en, asesor_id`,
+      values,
+    );
+
+    if (result.rowCount === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'Cliente no encontrado',
+      });
+    }
+
+    res.json({
+      success: true,
+      message: 'Cliente actualizado exitosamente',
+      client: normalizeClient(result.rows[0]),
+    });
+  } catch (error) {
+    console.error('Error actualizando cliente:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error actualizando cliente',
+      error: error.message,
+    });
+  }
 };

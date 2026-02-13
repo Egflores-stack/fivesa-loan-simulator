@@ -16,6 +16,7 @@ import {
     calculateLoan, 
     createLoan, 
     approveLoan, 
+    rejectLoan,
     getAllLoans, 
     getLoanDetails 
 } from './controllers/loanController.js';
@@ -53,6 +54,7 @@ app.put('/api/clients/:id', verifyToken, updateClient);
 app.post('/api/loans/calculate', verifyToken, calculateLoan);
 app.post('/api/loans', verifyToken, createLoan);
 app.put('/api/loans/:id/approve', verifyToken, approveLoan);
+app.put('/api/loans/:id/reject', verifyToken, rejectLoan);
 app.get('/api/loans', verifyToken, getAllLoans);
 app.get('/api/loans/:id', verifyToken, getLoanDetails);
 

@@ -1,19 +1,18 @@
-import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
-import { useAuth } from "@/hooks/useAuth";
-import { getLoans, approveLoan, rejectLoan } from "@/lib/dashboardApi";
-import { toast } from "@/hooks/use-toast";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
+import { approveLoan, getLoans, rejectLoan } from '@/lib/dashboardApi';
+import { toast } from '@/hooks/use-toast';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select";
+} from '@/components/ui/select';
 import {
   Table,
   TableBody,
@@ -21,174 +20,158 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from "@/components/ui/table";
+} from '@/components/ui/table';
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
-} from "@/components/ui/dialog";
-import { Textarea } from "@/components/ui/textarea";
-import {
-  ClipboardList,
-  Eye,
-  CheckCircle,
-  XCircle,
-  Search,
-  RefreshCw,
-  Clock,
-  AlertCircle
-} from "lucide-react";
+} from '@/components/ui/dialog';
+import { Textarea } from '@/components/ui/textarea';
 
-interface Loan {
+interface LoanRow {
   id: number;
-  client_id: number;
-  client_name: string;
-  email: string;
-  loan_type: string;
-  amount_requested: number;
-  amount_approved?: number;
-  term_months: number;
-  annual_interest_rate: number;
-  monthly_payment: number;
-  status: 'pending' | 'approved' | 'rejected' | 'active' | 'completed' | 'defaulted';
-  created_at: string;
-  approval_date?: string;
-  advisor_name: string;
+  codigo: string;
+  cliente_nombre: string;
+  cliente_email?: string;
+  tipo_credito: string;
+  monto_solicitado: number;
+  tasa_interes: number;
+  plazo_meses: number;
+  estado: 'PENDIENTE' | 'APROBADO' | 'RECHAZADO' | string;
+  fecha_solicitud: string;
+  fecha_aprobacion?: string;
+  asesor_nombre?: string;
+  cuota_referencial?: number;
 }
 
+const currencyFormatter = new Intl.NumberFormat('es-NI', {
+  style: 'currency',
+  currency: 'NIO',
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
+});
+
+const STATUS_OPTIONS = [
+  { value: 'TODOS', label: 'Todos' },
+  { value: 'PENDIENTE', label: 'Pendientes' },
+  { value: 'APROBADO', label: 'Aprobados' },
+  { value: 'RECHAZADO', label: 'Rechazados' },
+];
+
+const statusBadgeClass = (status: string) => {
+  switch (status) {
+    case 'APROBADO':
+      return 'bg-green-100 text-green-800';
+    case 'RECHAZADO':
+      return 'bg-red-100 text-red-800';
+    default:
+      return 'bg-yellow-100 text-yellow-800';
+  }
+};
+
 const Requests = () => {
-  const { user } = useAuth();
-  const [loans, setLoans] = useState<Loan[]>([]);
-  const [filteredLoans, setFilteredLoans] = useState<Loan[]>([]);
+  const [rows, setRows] = useState<LoanRow[]>([]);
   const [loading, setLoading] = useState(false);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState<string>('all');
-  const [selectedLoan, setSelectedLoan] = useState<Loan | null>(null);
+  const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState('TODOS');
+
+  const [selectedLoan, setSelectedLoan] = useState<LoanRow | null>(null);
   const [showDetailsDialog, setShowDetailsDialog] = useState(false);
   const [showApprovalDialog, setShowApprovalDialog] = useState(false);
   const [showRejectionDialog, setShowRejectionDialog] = useState(false);
-  const [approvalAmount, setApprovalAmount] = useState('');
   const [rejectionReason, setRejectionReason] = useState('');
 
-  const loadLoans = async () => {
+  const loadLoans = useCallback(async () => {
     try {
       setLoading(true);
-      const data = await getLoans(statusFilter === 'all' ? undefined : statusFilter);
-      setLoans(data.loans || []);
+      const status = statusFilter === 'TODOS' ? undefined : statusFilter;
+      const response = await getLoans(status);
+      setRows(response.loans || []);
     } catch (error) {
-      console.error('Error cargando préstamos:', error);
+      console.error('Error cargando solicitudes:', error);
       toast({
-        title: "Error",
-        description: "No se pudieron cargar las solicitudes",
-        variant: "destructive",
+        title: 'Error',
+        description: 'No se pudieron cargar las solicitudes',
+        variant: 'destructive',
       });
     } finally {
       setLoading(false);
     }
-  };
-
-  useEffect(() => {
-    loadLoans();
   }, [statusFilter]);
 
   useEffect(() => {
-    const filtered = loans.filter(loan => 
-      loan.client_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      loan.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      loan.loan_type.toLowerCase().includes(searchTerm.toLowerCase())
-    );
-    setFilteredLoans(filtered);
-  }, [loans, searchTerm]);
+    loadLoans();
+  }, [loadLoans]);
 
-  const handleApprove = async () => {
-    if (!selectedLoan || !approvalAmount) return;
+  const filteredRows = useMemo(() => {
+    const normalizedSearch = search.trim().toLowerCase();
+    if (!normalizedSearch) {
+      return rows;
+    }
+
+    return rows.filter((loan) => {
+      return (
+        loan.codigo?.toLowerCase().includes(normalizedSearch) ||
+        loan.cliente_nombre?.toLowerCase().includes(normalizedSearch) ||
+        loan.cliente_email?.toLowerCase().includes(normalizedSearch) ||
+        loan.tipo_credito?.toLowerCase().includes(normalizedSearch)
+      );
+    });
+  }, [rows, search]);
+
+  const onApprove = async () => {
+    if (!selectedLoan) return;
 
     try {
-      await approveLoan(selectedLoan.id, {
-        amountApproved: parseFloat(approvalAmount)
-      });
-      
+      await approveLoan(selectedLoan.id, {});
       toast({
-        title: "¡Préstamo Aprobado!",
-        description: "El préstamo ha sido aprobado exitosamente",
+        title: 'Credito aprobado',
+        description: `La solicitud ${selectedLoan.codigo} fue aprobada`,
       });
-      
       setShowApprovalDialog(false);
-      setApprovalAmount('');
-      loadLoans();
+      setSelectedLoan(null);
+      await loadLoans();
     } catch (error) {
-      console.error('Error aprobando préstamo:', error);
+      console.error('Error aprobando:', error);
       toast({
-        title: "Error",
-        description: "No se pudo aprobar el préstamo",
-        variant: "destructive",
+        title: 'Error',
+        description: 'No se pudo aprobar la solicitud',
+        variant: 'destructive',
       });
     }
   };
 
-  const handleReject = async () => {
-    if (!selectedLoan || !rejectionReason) return;
+  const onReject = async () => {
+    if (!selectedLoan || !rejectionReason.trim()) return;
 
     try {
-      await rejectLoan(selectedLoan.id, {
-        rejectionReason
-      });
-      
+      await rejectLoan(selectedLoan.id, { rejectionReason });
       toast({
-        title: "Préstamo Rechazado",
-        description: "El préstamo ha sido rechazado",
+        title: 'Credito rechazado',
+        description: `La solicitud ${selectedLoan.codigo} fue rechazada`,
       });
-      
       setShowRejectionDialog(false);
+      setSelectedLoan(null);
       setRejectionReason('');
-      loadLoans();
+      await loadLoans();
     } catch (error) {
-      console.error('Error rechazando préstamo:', error);
+      console.error('Error rechazando:', error);
       toast({
-        title: "Error",
-        description: "No se pudo rechazar el préstamo",
-        variant: "destructive",
+        title: 'Error',
+        description: 'No se pudo rechazar la solicitud',
+        variant: 'destructive',
       });
     }
-  };
-
-  const getStatusBadge = (status: string) => {
-    const statusConfig = {
-      pending: { color: 'bg-yellow-100 text-yellow-800', icon: Clock, text: 'Pendiente' },
-      approved: { color: 'bg-green-100 text-green-800', icon: CheckCircle, text: 'Aprobado' },
-      rejected: { color: 'bg-red-100 text-red-800', icon: XCircle, text: 'Rechazado' },
-      active: { color: 'bg-blue-100 text-blue-800', icon: CheckCircle, text: 'Activo' },
-      completed: { color: 'bg-gray-100 text-gray-800', icon: CheckCircle, text: 'Completado' },
-      defaulted: { color: 'bg-red-100 text-red-800', icon: AlertCircle, text: 'Incumplido' }
-    };
-
-    const config = statusConfig[status as keyof typeof statusConfig] || statusConfig.pending;
-    const Icon = config.icon;
-
-    return (
-      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${config.color}`}>
-        <Icon size={12} className="mr-1" />
-        {config.text}
-      </span>
-    );
-  };
-
-  const formatCurrency = (amount: number, currency: string = 'C$') => {
-    return `${currency} ${amount.toLocaleString('es-NI', { minimumFractionDigits: 2 })}`;
   };
 
   return (
     <div className="min-h-screen bg-muted/30">
       <header className="border-b border-border bg-card">
-        <div className="mx-auto flex max-w-6xl flex-col gap-4 px-4 py-6 sm:flex-row sm:items-center sm:justify-between">
+        <div className="mx-auto flex max-w-7xl flex-col gap-4 px-4 py-6 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <p className="text-sm uppercase tracking-widest text-muted-foreground">
-              Gestión de Préstamos
-            </p>
-            <h1 className="text-3xl font-semibold text-foreground">
-              Solicitudes de Crédito
-            </h1>
+            <p className="text-sm uppercase tracking-widest text-muted-foreground">Gestion de Creditos</p>
+            <h1 className="text-3xl font-semibold text-foreground">Solicitudes</h1>
           </div>
           <Button asChild variant="outline">
             <Link to="/dashboard">Volver al dashboard</Link>
@@ -196,304 +179,227 @@ const Requests = () => {
         </div>
       </header>
 
-      <main className="mx-auto max-w-6xl px-4 py-10">
-        {/* Filtros */}
-        <Card className="mb-6">
-          <CardContent className="p-6">
-            <div className="flex flex-col gap-4 md:flex-row md:items-center">
-              <div className="flex-1">
-                <div className="relative">
-                  <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                  <Input
-                    placeholder="Buscar por cliente, email o tipo..."
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    className="pl-10"
-                  />
-                </div>
-              </div>
-              <div className="flex gap-2">
-                <Select value={statusFilter} onValueChange={setStatusFilter}>
-                  <SelectTrigger className="w-40">
-                    <SelectValue placeholder="Estado" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Todos</SelectItem>
-                    <SelectItem value="pending">Pendientes</SelectItem>
-                    <SelectItem value="approved">Aprobados</SelectItem>
-                    <SelectItem value="rejected">Rechazados</SelectItem>
-                    <SelectItem value="active">Activos</SelectItem>
-                  </SelectContent>
-                </Select>
-                <Button variant="outline" onClick={loadLoans} disabled={loading}>
-                  <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-                </Button>
-              </div>
+      <main className="mx-auto max-w-7xl space-y-6 px-4 py-8">
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex flex-col gap-3 md:flex-row">
+              <Input
+                placeholder="Buscar por codigo, cliente, email o tipo"
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+              />
+              <Select value={statusFilter} onValueChange={setStatusFilter}>
+                <SelectTrigger className="w-full md:w-56">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {STATUS_OPTIONS.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Button variant="outline" onClick={loadLoans} disabled={loading}>
+                {loading ? 'Actualizando...' : 'Actualizar'}
+              </Button>
             </div>
           </CardContent>
         </Card>
 
-        {/* Tabla de solicitudes */}
         <Card>
           <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <ClipboardList className="h-5 w-5 text-primary" />
-              Solicitudes ({filteredLoans.length})
-            </CardTitle>
+            <CardTitle>Solicitudes ({filteredRows.length})</CardTitle>
           </CardHeader>
           <CardContent>
-            {loading ? (
-              <div className="flex items-center justify-center py-8">
-                <RefreshCw className="h-6 w-6 animate-spin" />
-                <span className="ml-2">Cargando solicitudes...</span>
-              </div>
-            ) : filteredLoans.length === 0 ? (
-              <div className="text-center py-8">
-                <p className="text-muted-foreground">No hay solicitudes que coincidan con los filtros</p>
-              </div>
-            ) : (
-              <div className="rounded-xl border border-border">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Cliente</TableHead>
-                      <TableHead>Tipo</TableHead>
-                      <TableHead>Monto Solicitado</TableHead>
-                      <TableHead>Monto Aprobado</TableHead>
-                      <TableHead>Plazo</TableHead>
-                      <TableHead>Tasa</TableHead>
-                      <TableHead>Estado</TableHead>
-                      <TableHead>Fecha</TableHead>
-                      <TableHead className="text-right">Acciones</TableHead>
+            <div className="rounded-md border">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Codigo</TableHead>
+                    <TableHead>Cliente</TableHead>
+                    <TableHead>Tipo</TableHead>
+                    <TableHead className="text-right">Monto</TableHead>
+                    <TableHead className="text-right">Tasa</TableHead>
+                    <TableHead className="text-right">Plazo</TableHead>
+                    <TableHead className="text-right">Cuota Ref.</TableHead>
+                    <TableHead>Estado</TableHead>
+                    <TableHead>Fecha</TableHead>
+                    <TableHead className="text-right">Acciones</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {filteredRows.map((loan) => (
+                    <TableRow key={loan.id}>
+                      <TableCell className="font-medium">{loan.codigo}</TableCell>
+                      <TableCell>
+                        <div className="text-sm">
+                          <p className="font-medium">{loan.cliente_nombre}</p>
+                          <p className="text-muted-foreground">{loan.cliente_email || '-'}</p>
+                        </div>
+                      </TableCell>
+                      <TableCell>{loan.tipo_credito}</TableCell>
+                      <TableCell className="text-right">{currencyFormatter.format(loan.monto_solicitado)}</TableCell>
+                      <TableCell className="text-right">{loan.tasa_interes.toFixed(2)}%</TableCell>
+                      <TableCell className="text-right">{loan.plazo_meses}</TableCell>
+                      <TableCell className="text-right">
+                        {currencyFormatter.format(loan.cuota_referencial ?? 0)}
+                      </TableCell>
+                      <TableCell>
+                        <span className={`rounded-full px-2 py-1 text-xs font-medium ${statusBadgeClass(loan.estado)}`}>
+                          {loan.estado}
+                        </span>
+                      </TableCell>
+                      <TableCell>{new Date(loan.fecha_solicitud).toLocaleDateString('es-NI')}</TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex justify-end gap-2">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => {
+                              setSelectedLoan(loan);
+                              setShowDetailsDialog(true);
+                            }}
+                          >
+                            Ver
+                          </Button>
+                          {loan.estado === 'PENDIENTE' && (
+                            <>
+                              <Button
+                                size="sm"
+                                onClick={() => {
+                                  setSelectedLoan(loan);
+                                  setShowApprovalDialog(true);
+                                }}
+                              >
+                                Aprobar
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="destructive"
+                                onClick={() => {
+                                  setSelectedLoan(loan);
+                                  setShowRejectionDialog(true);
+                                }}
+                              >
+                                Rechazar
+                              </Button>
+                            </>
+                          )}
+                        </div>
+                      </TableCell>
                     </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {filteredLoans.map((loan) => (
-                      <TableRow key={loan.id}>
-                        <TableCell>
-                          <div>
-                            <div className="font-medium">{loan.client_name}</div>
-                            <div className="text-sm text-muted-foreground">{loan.email}</div>
-                          </div>
-                        </TableCell>
-                        <TableCell className="capitalize">{loan.loan_type}</TableCell>
-                        <TableCell>{formatCurrency(loan.amount_requested)}</TableCell>
-                        <TableCell>
-                          {loan.amount_approved 
-                            ? formatCurrency(loan.amount_approved)
-                            : '-'
-                          }
-                        </TableCell>
-                        <TableCell>{loan.term_months} meses</TableCell>
-                        <TableCell>{loan.annual_interest_rate}%</TableCell>
-                        <TableCell>{getStatusBadge(loan.status)}</TableCell>
-                        <TableCell>
-                          {new Date(loan.created_at).toLocaleDateString('es-NI')}
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <div className="flex justify-end gap-2">
-                            <Button
-                              size="icon"
-                              variant="ghost"
-                              onClick={() => {
-                                setSelectedLoan(loan);
-                                setShowDetailsDialog(true);
-                              }}
-                            >
-                              <Eye className="h-4 w-4" />
-                            </Button>
-                            {loan.status === 'pending' && (
-                              <>
-                                <Button
-                                  size="icon"
-                                  variant="ghost"
-                                  onClick={() => {
-                                    setSelectedLoan(loan);
-                                    setApprovalAmount(loan.amount_requested.toString());
-                                    setShowApprovalDialog(true);
-                                  }}
-                                  className="text-green-600 hover:text-green-700"
-                                >
-                                  <CheckCircle className="h-4 w-4" />
-                                </Button>
-                                <Button
-                                  size="icon"
-                                  variant="ghost"
-                                  onClick={() => {
-                                    setSelectedLoan(loan);
-                                    setShowRejectionDialog(true);
-                                  }}
-                                  className="text-red-600 hover:text-red-700"
-                                >
-                                  <XCircle className="h-4 w-4" />
-                                </Button>
-                              </>
-                            )}
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
-            )}
+                  ))}
+                  {!loading && filteredRows.length === 0 && (
+                    <TableRow>
+                      <TableCell colSpan={10} className="text-center text-muted-foreground">
+                        No hay resultados para los filtros actuales.
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </div>
           </CardContent>
         </Card>
       </main>
 
-      {/* Dialog de detalles */}
       <Dialog open={showDetailsDialog} onOpenChange={setShowDetailsDialog}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent>
           <DialogHeader>
-            <DialogTitle>Detalles de la Solicitud</DialogTitle>
+            <DialogTitle>Detalle de solicitud</DialogTitle>
           </DialogHeader>
           {selectedLoan && (
-            <div className="grid gap-4 text-sm">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label className="text-muted-foreground">Cliente</Label>
-                  <p className="font-medium">{selectedLoan.client_name}</p>
-                </div>
-                <div>
-                  <Label className="text-muted-foreground">Email</Label>
-                  <p className="font-medium">{selectedLoan.email}</p>
-                </div>
-                <div>
-                  <Label className="text-muted-foreground">Tipo de Préstamo</Label>
-                  <p className="font-medium capitalize">{selectedLoan.loan_type}</p>
-                </div>
-                <div>
-                  <Label className="text-muted-foreground">Asesor</Label>
-                  <p className="font-medium">{selectedLoan.advisor_name}</p>
-                </div>
-                <div>
-                  <Label className="text-muted-foreground">Monto Solicitado</Label>
-                  <p className="font-medium">{formatCurrency(selectedLoan.amount_requested)}</p>
-                </div>
-                <div>
-                  <Label className="text-muted-foreground">Monto Aprobado</Label>
-                  <p className="font-medium">
-                    {selectedLoan.amount_approved 
-                      ? formatCurrency(selectedLoan.amount_approved)
-                      : 'Pendiente'
-                    }
-                  </p>
-                </div>
-                <div>
-                  <Label className="text-muted-foreground">Plazo</Label>
-                  <p className="font-medium">{selectedLoan.term_months} meses</p>
-                </div>
-                <div>
-                  <Label className="text-muted-foreground">Tasa Anual</Label>
-                  <p className="font-medium">{selectedLoan.annual_interest_rate}%</p>
-                </div>
-                <div>
-                  <Label className="text-muted-foreground">Cuota Mensual</Label>
-                  <p className="font-medium">{formatCurrency(selectedLoan.monthly_payment)}</p>
-                </div>
-                <div>
-                  <Label className="text-muted-foreground">Estado</Label>
-                  <div className="mt-1">{getStatusBadge(selectedLoan.status)}</div>
-                </div>
-                <div>
-                  <Label className="text-muted-foreground">Fecha Solicitud</Label>
-                  <p className="font-medium">
-                    {new Date(selectedLoan.created_at).toLocaleDateString('es-NI')}
-                  </p>
-                </div>
-                {selectedLoan.approval_date && (
-                  <div>
-                    <Label className="text-muted-foreground">Fecha Aprobación</Label>
-                    <p className="font-medium">
-                      {new Date(selectedLoan.approval_date).toLocaleDateString('es-NI')}
-                    </p>
-                  </div>
-                )}
+            <div className="grid gap-3 text-sm">
+              <div>
+                <Label>Codigo</Label>
+                <p>{selectedLoan.codigo}</p>
+              </div>
+              <div>
+                <Label>Cliente</Label>
+                <p>{selectedLoan.cliente_nombre}</p>
+              </div>
+              <div>
+                <Label>Email</Label>
+                <p>{selectedLoan.cliente_email || '-'}</p>
+              </div>
+              <div>
+                <Label>Tipo</Label>
+                <p>{selectedLoan.tipo_credito}</p>
+              </div>
+              <div>
+                <Label>Monto solicitado</Label>
+                <p>{currencyFormatter.format(selectedLoan.monto_solicitado)}</p>
+              </div>
+              <div>
+                <Label>Tasa</Label>
+                <p>{selectedLoan.tasa_interes.toFixed(2)}%</p>
+              </div>
+              <div>
+                <Label>Plazo</Label>
+                <p>{selectedLoan.plazo_meses} meses</p>
+              </div>
+              <div>
+                <Label>Cuota referencial</Label>
+                <p>{currencyFormatter.format(selectedLoan.cuota_referencial ?? 0)}</p>
+              </div>
+              <div>
+                <Label>Asesor</Label>
+                <p>{selectedLoan.asesor_nombre || '-'}</p>
+              </div>
+              <div>
+                <Label>Estado</Label>
+                <p>{selectedLoan.estado}</p>
               </div>
             </div>
           )}
         </DialogContent>
       </Dialog>
 
-      {/* Dialog de aprobación */}
       <Dialog open={showApprovalDialog} onOpenChange={setShowApprovalDialog}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Aprobar Préstamo</DialogTitle>
+            <DialogTitle>Aprobar solicitud</DialogTitle>
           </DialogHeader>
-          {selectedLoan && (
-            <div className="space-y-4">
-              <div>
-                <Label className="text-muted-foreground">Cliente</Label>
-                <p className="font-medium">{selectedLoan.client_name}</p>
-              </div>
-              <div>
-                <Label className="text-muted-foreground">Monto Solicitado</Label>
-                <p className="font-medium">{formatCurrency(selectedLoan.amount_requested)}</p>
-              </div>
-              <div>
-                <Label htmlFor="approvalAmount">Monto a Aprobar</Label>
-                <Input
-                  id="approvalAmount"
-                  type="number"
-                  value={approvalAmount}
-                  onChange={(e) => setApprovalAmount(e.target.value)}
-                  placeholder="Ingrese el monto a aprobar"
-                />
-              </div>
-              <div className="flex justify-end gap-2">
-                <Button variant="outline" onClick={() => setShowApprovalDialog(false)}>
-                  Cancelar
-                </Button>
-                <Button onClick={handleApprove} disabled={!approvalAmount}>
-                  Aprobar
-                </Button>
-              </div>
+          <div className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              Se aprobara la solicitud {selectedLoan?.codigo} por {currencyFormatter.format(selectedLoan?.monto_solicitado ?? 0)}.
+            </p>
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" onClick={() => setShowApprovalDialog(false)}>
+                Cancelar
+              </Button>
+              <Button onClick={onApprove}>Confirmar aprobacion</Button>
             </div>
-          )}
+          </div>
         </DialogContent>
       </Dialog>
 
-      {/* Dialog de rechazo */}
       <Dialog open={showRejectionDialog} onOpenChange={setShowRejectionDialog}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Rechazar Préstamo</DialogTitle>
+            <DialogTitle>Rechazar solicitud</DialogTitle>
           </DialogHeader>
-          {selectedLoan && (
-            <div className="space-y-4">
-              <div>
-                <Label className="text-muted-foreground">Cliente</Label>
-                <p className="font-medium">{selectedLoan.client_name}</p>
-              </div>
-              <div>
-                <Label className="text-muted-foreground">Monto Solicitado</Label>
-                <p className="font-medium">{formatCurrency(selectedLoan.amount_requested)}</p>
-              </div>
-              <div>
-                <Label htmlFor="rejectionReason">Motivo del Rechazo</Label>
-                <Textarea
-                  id="rejectionReason"
-                  value={rejectionReason}
-                  onChange={(e) => setRejectionReason(e.target.value)}
-                  placeholder="Ingrese el motivo del rechazo..."
-                  rows={3}
-                />
-              </div>
-              <div className="flex justify-end gap-2">
-                <Button variant="outline" onClick={() => setShowRejectionDialog(false)}>
-                  Cancelar
-                </Button>
-                <Button 
-                  variant="destructive" 
-                  onClick={handleReject} 
-                  disabled={!rejectionReason}
-                >
-                  Rechazar
-                </Button>
-              </div>
+          <div className="space-y-4">
+            <div>
+              <Label htmlFor="rejectionReason">Motivo</Label>
+              <Textarea
+                id="rejectionReason"
+                value={rejectionReason}
+                onChange={(event) => setRejectionReason(event.target.value)}
+                rows={4}
+                placeholder="Escribe el motivo del rechazo"
+              />
             </div>
-          )}
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" onClick={() => setShowRejectionDialog(false)}>
+                Cancelar
+              </Button>
+              <Button variant="destructive" onClick={onReject} disabled={!rejectionReason.trim()}>
+                Confirmar rechazo
+              </Button>
+            </div>
+          </div>
         </DialogContent>
       </Dialog>
     </div>
