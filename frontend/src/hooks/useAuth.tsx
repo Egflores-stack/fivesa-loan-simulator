@@ -17,7 +17,7 @@ type AuthContextValue = {
   user: PostgresUser | null;
   token: string | null;
   isLoading: boolean;
-  login: (email: string, password: string) => Promise<void>;
+  login: (username: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
 };
 
@@ -52,9 +52,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       });
   }, []);
 
-  const login = async (email: string, password: string) => {
+  const login = async (username: string, password: string) => {
     const { token: nextToken, user: loggedUser } = await loginWithPostgres({
-      email,
+      username,
       password,
     });
     setToken(nextToken);

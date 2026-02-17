@@ -2,6 +2,7 @@
 export interface PostgresUser {
   id: number;
   email: string;
+  username?: string;
   first_name?: string;
   last_name?: string;
   full_name?: string;
@@ -14,7 +15,7 @@ const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
 
 // Funcion para login
 export const loginWithPostgres = async (credentials: {
-  email: string;
+  username: string;
   password: string;
 }): Promise<{ token: string; user: PostgresUser }> => {
   const response = await fetch(`${API_URL}/auth/login`, {

@@ -7,10 +7,10 @@ import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { AlertCircle, LogIn, Shield, Building, Calculator, TrendingUp, Cloud, Key, Banknote, Mail } from 'lucide-react';
+import { AlertCircle, LogIn, Shield, Building, Calculator, TrendingUp, Cloud, Key, Banknote, User } from 'lucide-react';
 
 const Login = () => {
-  const [email, setEmail] = useState('admin@credia.com');
+  const [username, setUsername] = useState('admin');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -23,7 +23,7 @@ const Login = () => {
     setError('');
 
     try {
-      await login(email, password);
+      await login(username, password);
       navigate('/dashboard');
     } catch (err) {
       setError('Credenciales invalidas');
@@ -141,19 +141,19 @@ const Login = () => {
 
             <form onSubmit={handleLogin} className="space-y-5">
               <div className="space-y-2.5">
-                <Label htmlFor="email" className="text-gray-700 font-medium flex items-center gap-2">
+                <Label htmlFor="username" className="text-gray-700 font-medium flex items-center gap-2">
                   <span className="bg-gray-100 p-1 rounded">
-                    <Mail className="h-3.5 w-3.5 text-gray-600" />
+                    <User className="h-3.5 w-3.5 text-gray-600" />
                   </span>
-                  Email
+                  Usuario
                 </Label>
                 <div className="relative">
                   <Input
-                    id="email"
-                    type="email"
-                    placeholder="admin@credia.com"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
+                    id="username"
+                    type="text"
+                    placeholder="admin"
+                    value={username}
+                    onChange={(e) => setUsername(e.target.value)}
                     required
                     className="h-12 pl-10 bg-gray-50 border-gray-300 focus:border-cyan-500 focus:ring-cyan-500"
                   />
@@ -162,7 +162,7 @@ const Login = () => {
                   </div>
                 </div>
                 <p className="text-xs text-gray-500">
-                  Usa tu correo corporativo
+                  Ingresa tu usuario de acceso
                 </p>
               </div>
 
