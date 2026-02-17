@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
 import { approveLoan, getLoans, rejectLoan } from '@/lib/dashboardApi';
 import { toast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
@@ -28,6 +27,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Textarea } from '@/components/ui/textarea';
+import AppLayout from '@/components/AppLayout';
 
 interface LoanRow {
   id: number;
@@ -74,7 +74,7 @@ const Requests = () => {
   const [rows, setRows] = useState<LoanRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState('TODOS');
+  const [statusFilter, setStatusFilter] = useState('PENDIENTE');
 
   const [selectedLoan, setSelectedLoan] = useState<LoanRow | null>(null);
   const [showDetailsDialog, setShowDetailsDialog] = useState(false);
@@ -166,21 +166,12 @@ const Requests = () => {
   };
 
   return (
-    <div className="min-h-screen bg-muted/30">
-      <header className="border-b border-border bg-card">
-        <div className="mx-auto flex max-w-7xl flex-col gap-4 px-4 py-6 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <p className="text-sm uppercase tracking-widest text-muted-foreground">Gestion de Creditos</p>
-            <h1 className="text-3xl font-semibold text-foreground">Solicitudes</h1>
-          </div>
-          <Button asChild variant="outline">
-            <Link to="/dashboard">Volver al dashboard</Link>
-          </Button>
-        </div>
-      </header>
-
-      <main className="mx-auto max-w-7xl space-y-6 px-4 py-8">
-        <Card>
+    <AppLayout
+      title="Solicitudes"
+      subtitle="Gestion, aprobacion y rechazo de creditos"
+    >
+      <div className="space-y-6">
+        <Card className="border-gray-200 shadow-xl">
           <CardContent className="p-4">
             <div className="flex flex-col gap-3 md:flex-row">
               <Input
@@ -200,14 +191,14 @@ const Requests = () => {
                   ))}
                 </SelectContent>
               </Select>
-              <Button variant="outline" onClick={loadLoans} disabled={loading}>
+              <Button variant="outline" className="border-gray-300" onClick={loadLoans} disabled={loading}>
                 {loading ? 'Actualizando...' : 'Actualizar'}
               </Button>
             </div>
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="border-gray-200 shadow-xl">
           <CardHeader>
             <CardTitle>Solicitudes ({filteredRows.length})</CardTitle>
           </CardHeader>
@@ -267,6 +258,7 @@ const Requests = () => {
                             <>
                               <Button
                                 size="sm"
+                                className="bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-700 hover:to-blue-700"
                                 onClick={() => {
                                   setSelectedLoan(loan);
                                   setShowApprovalDialog(true);
@@ -302,7 +294,7 @@ const Requests = () => {
             </div>
           </CardContent>
         </Card>
-      </main>
+      </div>
 
       <Dialog open={showDetailsDialog} onOpenChange={setShowDetailsDialog}>
         <DialogContent>
@@ -369,7 +361,7 @@ const Requests = () => {
               <Button variant="outline" onClick={() => setShowApprovalDialog(false)}>
                 Cancelar
               </Button>
-              <Button onClick={onApprove}>Confirmar aprobacion</Button>
+              <Button className="bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-700 hover:to-blue-700" onClick={onApprove}>Confirmar aprobacion</Button>
             </div>
           </div>
         </DialogContent>
@@ -402,7 +394,7 @@ const Requests = () => {
           </div>
         </DialogContent>
       </Dialog>
-    </div>
+    </AppLayout>
   );
 };
 

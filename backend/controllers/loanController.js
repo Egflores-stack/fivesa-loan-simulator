@@ -38,14 +38,22 @@ const getFinancialParameters = async () => {
     ...PARAMETER_CODES.damageInsurance,
     ...PARAMETER_CODES.commission,
   ];
-
-  const result = await query(
-    `SELECT codigo, valor
-     FROM pa.parametros
-     WHERE activo = true
-       AND codigo = ANY($1::text[])`,
-    [codes],
-  );
+  let result;
+  try {
+    result = await query(
+      `SELECT codigo, valor
+       FROM pa.parametros
+       WHERE activo = true
+         AND codigo = ANY($1::text[])`,
+      [codes],
+    );
+  } catch (error) {
+    return {
+      seguroVidaPct: 0,
+      seguroDanosPct: 0,
+      comisionPct: 0,
+    };
+  }
 
   const asMap = new Map(result.rows.map((row) => [row.codigo, row.valor]));
 
@@ -145,6 +153,53 @@ const generateCreditCode = async (dbClient) => {
   const now = new Date();
   const year = now.getFullYear();
   return `CR-${year}-${String(nextId).padStart(6, '0')}`;
+};
+
+const columnsCache = new Map();
+
+const getTableColumns = async (dbClient, schema, table) => {
+  const cacheKey = `${schema}.${table}`;
+  if (columnsCache.has(cacheKey)) {
+    return columnsCache.get(cacheKey);
+  }
+
+  const result = await dbClient.query(
+    `SELECT column_name
+     FROM information_schema.columns
+     WHERE table_schema = $1
+       AND table_name = $2`,
+    [schema, table],
+  );
+
+  const columns = new Set(result.rows.map((row) => row.column_name));
+  columnsCache.set(cacheKey, columns);
+  return columns;
+};
+
+const pickExistingColumn = (columns, candidates) => {
+  for (const candidate of candidates) {
+    if (columns.has(candidate)) {
+      return candidate;
+    }
+  }
+  return null;
+};
+
+const buildInsertQuery = (schema, table, payload) => {
+  const columns = Object.keys(payload);
+  const values = Object.values(payload);
+  const placeholders = columns.map((_, idx) => `$${idx + 1}`).join(', ');
+  const sql = `INSERT INTO ${schema}.${table} (${columns.join(', ')}) VALUES (${placeholders})`;
+  return { sql, values };
+};
+
+const safeParseJson = (value, fallback = {}) => {
+  if (!value || typeof value !== 'string') return fallback;
+  try {
+    return JSON.parse(value);
+  } catch {
+    return fallback;
+  }
 };
 
 export const calculateLoan = async (req, res) => {
@@ -261,37 +316,85 @@ export const createLoan = async (req, res) => {
     const observaciones = JSON.stringify({
       nota: observacionesEntrada,
       calculo: metadata,
+      analisis: req.body.analisis ?? null,
     });
 
     await dbClient.query('BEGIN');
 
     const codigo = await generateCreditCode(dbClient);
+    const creditColumns = await getTableColumns(dbClient, 'op', 'creditos');
 
+    const creditColumnMap = {
+      id: pickExistingColumn(creditColumns, ['id']),
+      codigo: pickExistingColumn(creditColumns, ['codigo', 'numero_credito']),
+      clienteId: pickExistingColumn(creditColumns, ['cliente_id', 'client_id']),
+      montoSolicitado: pickExistingColumn(creditColumns, ['monto_solicitado', 'amount_requested', 'monto']),
+      tasaInteres: pickExistingColumn(creditColumns, ['tasa_interes', 'annual_interest_rate']),
+      plazoMeses: pickExistingColumn(creditColumns, ['plazo_meses', 'term_months']),
+      tipoCredito: pickExistingColumn(creditColumns, ['tipo_credito', 'loan_type']),
+      destino: pickExistingColumn(creditColumns, ['destino', 'purpose']),
+      estado: pickExistingColumn(creditColumns, ['estado', 'status']),
+      observaciones: pickExistingColumn(creditColumns, ['observaciones', 'notes']),
+      asesorId: pickExistingColumn(creditColumns, ['asesor_id', 'created_by', 'usuario_id']),
+      fechaSolicitud: pickExistingColumn(creditColumns, ['fecha_solicitud', 'created_at']),
+      cuotaReferencial: pickExistingColumn(creditColumns, ['cuota_referencial', 'monthly_payment']),
+      comisionTotal: pickExistingColumn(creditColumns, ['comision_total', 'total_comision', 'commission_amount']),
+      seguroVidaPct: pickExistingColumn(creditColumns, ['seguro_vida_pct']),
+      seguroDanosPct: pickExistingColumn(creditColumns, ['seguro_danos_pct', 'seguro_danios_pct']),
+      comisionPct: pickExistingColumn(creditColumns, ['comision_pct', 'commission_pct']),
+      fechaPrimerVencimiento: pickExistingColumn(creditColumns, ['fecha_primer_vencimiento']),
+    };
+
+    const requiredCreditColumns = [
+      creditColumnMap.clienteId,
+      creditColumnMap.montoSolicitado,
+      creditColumnMap.tasaInteres,
+      creditColumnMap.plazoMeses,
+      creditColumnMap.tipoCredito,
+    ];
+
+    if (requiredCreditColumns.some((column) => !column)) {
+      throw new Error('La tabla op.creditos no tiene las columnas minimas requeridas para registrar el credito');
+    }
+
+    const creditPayload = {
+      [creditColumnMap.clienteId]: clienteId,
+      [creditColumnMap.montoSolicitado]: montoSolicitado,
+      [creditColumnMap.tasaInteres]: tasaInteres,
+      [creditColumnMap.plazoMeses]: plazoMeses,
+      [creditColumnMap.tipoCredito]: tipoCredito,
+    };
+
+    if (creditColumnMap.codigo) creditPayload[creditColumnMap.codigo] = codigo;
+    if (creditColumnMap.destino) creditPayload[creditColumnMap.destino] = destino;
+    if (creditColumnMap.estado) creditPayload[creditColumnMap.estado] = 'PENDIENTE';
+    if (creditColumnMap.observaciones) creditPayload[creditColumnMap.observaciones] = observaciones;
+    if (creditColumnMap.asesorId) creditPayload[creditColumnMap.asesorId] = userId;
+    if (creditColumnMap.cuotaReferencial) creditPayload[creditColumnMap.cuotaReferencial] = amortization.firstInstallmentAmount;
+    if (creditColumnMap.comisionTotal) creditPayload[creditColumnMap.comisionTotal] = totalComision;
+    if (creditColumnMap.seguroVidaPct) creditPayload[creditColumnMap.seguroVidaPct] = metadata.seguroVidaPct;
+    if (creditColumnMap.seguroDanosPct) creditPayload[creditColumnMap.seguroDanosPct] = metadata.seguroDanosPct;
+    if (creditColumnMap.comisionPct) creditPayload[creditColumnMap.comisionPct] = metadata.comisionPct;
+    if (creditColumnMap.fechaPrimerVencimiento) {
+      creditPayload[creditColumnMap.fechaPrimerVencimiento] = toDateOnly(firstDueDate);
+    }
+
+    const { sql: creditSql, values: creditValues } = buildInsertQuery('op', 'creditos', creditPayload);
+    const returningColumns = [
+      creditColumnMap.id,
+      creditColumnMap.codigo,
+      creditColumnMap.fechaSolicitud,
+      creditColumnMap.estado,
+    ].filter(Boolean);
     const creditResult = await dbClient.query(
-      `INSERT INTO op.creditos
-       (codigo, cliente_id, monto_solicitado, tasa_interes, plazo_meses, tipo_credito, destino, estado, observaciones, asesor_id)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, 'PENDIENTE', $8, $9)
-       RETURNING id, codigo, fecha_solicitud, estado`,
-      [codigo, clienteId, montoSolicitado, tasaInteres, plazoMeses, tipoCredito, destino, observaciones, userId],
+      `${creditSql} RETURNING ${returningColumns.length > 0 ? returningColumns.join(', ') : '*'}`,
+      creditValues,
     );
 
-    const creditoId = creditResult.rows[0].id;
-
-    for (const row of amortization.rows) {
-      await dbClient.query(
-        `INSERT INTO op.amortizaciones
-         (credito_id, numero_cuota, fecha_vencimiento, capital, interes, cuota_total, saldo_capital, estado)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, 'PENDIENTE')`,
-        [
-          creditoId,
-          row.numeroCuota,
-          row.fechaVencimiento,
-          row.capital,
-          row.interes,
-          row.cuotaTotal,
-          row.saldoCapital,
-        ],
-      );
+    const creditRow = creditResult.rows[0];
+    const creditoId = Number(creditRow[creditColumnMap.id ?? 'id']);
+    if (!Number.isFinite(creditoId)) {
+      throw new Error('No se pudo obtener el ID del credito creado');
     }
 
     await dbClient.query('COMMIT');
@@ -301,13 +404,13 @@ export const createLoan = async (req, res) => {
       message: 'Solicitud de credito creada correctamente',
       loan: {
         id: creditoId,
-        codigo,
+        codigo: creditRow[creditColumnMap.codigo ?? 'codigo'] ?? codigo,
         cliente_id: clienteId,
         monto_solicitado: round2(montoSolicitado),
         tasa_interes: round2(tasaInteres),
         plazo_meses: plazoMeses,
-        estado: creditResult.rows[0].estado,
-        fecha_solicitud: creditResult.rows[0].fecha_solicitud,
+        estado: creditRow[creditColumnMap.estado ?? 'estado'] ?? 'PENDIENTE',
+        fecha_solicitud: creditRow[creditColumnMap.fechaSolicitud ?? 'fecha_solicitud'] ?? null,
       },
       calculation: {
         cuotaReferencial: amortization.firstInstallmentAmount,
@@ -329,40 +432,186 @@ export const createLoan = async (req, res) => {
 };
 
 export const approveLoan = async (req, res) => {
+  const dbClient = await pool.connect();
   try {
     const creditId = parseInt(req.params.id, 10);
     const userId = req.userId;
+    if (!Number.isInteger(creditId) || creditId <= 0) {
+      return res.status(400).json({ success: false, message: 'ID de credito invalido' });
+    }
 
-    const result = await query(
+    await dbClient.query('BEGIN');
+
+    const creditColumns = await getTableColumns(dbClient, 'op', 'creditos');
+    const creditColumnMap = {
+      id: pickExistingColumn(creditColumns, ['id']),
+      codigo: pickExistingColumn(creditColumns, ['codigo', 'numero_credito']),
+      clienteId: pickExistingColumn(creditColumns, ['cliente_id', 'client_id']),
+      montoSolicitado: pickExistingColumn(creditColumns, ['monto_solicitado', 'amount_requested', 'monto']),
+      tasaInteres: pickExistingColumn(creditColumns, ['tasa_interes', 'annual_interest_rate']),
+      plazoMeses: pickExistingColumn(creditColumns, ['plazo_meses', 'term_months']),
+      estado: pickExistingColumn(creditColumns, ['estado', 'status']),
+      aprobadoPor: pickExistingColumn(creditColumns, ['aprobado_por', 'approved_by']),
+      fechaAprobacion: pickExistingColumn(creditColumns, ['fecha_aprobacion', 'approval_date']),
+      fechaPrimerVencimiento: pickExistingColumn(creditColumns, ['fecha_primer_vencimiento']),
+      observaciones: pickExistingColumn(creditColumns, ['observaciones', 'notes']),
+      seguroVidaPct: pickExistingColumn(creditColumns, ['seguro_vida_pct']),
+      seguroDanosPct: pickExistingColumn(creditColumns, ['seguro_danos_pct', 'seguro_danios_pct']),
+      comisionPct: pickExistingColumn(creditColumns, ['comision_pct', 'commission_pct']),
+    };
+    const requiredCreditColumns = [
+      creditColumnMap.id,
+      creditColumnMap.montoSolicitado,
+      creditColumnMap.tasaInteres,
+      creditColumnMap.plazoMeses,
+      creditColumnMap.estado,
+    ];
+    if (requiredCreditColumns.some((column) => !column)) {
+      throw new Error('La tabla op.creditos no tiene columnas minimas para aprobar');
+    }
+
+    const selectList = [
+      `${creditColumnMap.id} AS id`,
+      `${creditColumnMap.montoSolicitado} AS monto_solicitado`,
+      `${creditColumnMap.tasaInteres} AS tasa_interes`,
+      `${creditColumnMap.plazoMeses} AS plazo_meses`,
+      `${creditColumnMap.estado} AS estado`,
+      creditColumnMap.codigo ? `${creditColumnMap.codigo} AS codigo` : `NULL AS codigo`,
+      creditColumnMap.clienteId ? `${creditColumnMap.clienteId} AS cliente_id` : `NULL AS cliente_id`,
+      creditColumnMap.fechaPrimerVencimiento
+        ? `${creditColumnMap.fechaPrimerVencimiento} AS fecha_primer_vencimiento`
+        : `NULL AS fecha_primer_vencimiento`,
+      creditColumnMap.observaciones ? `${creditColumnMap.observaciones} AS observaciones` : `NULL AS observaciones`,
+      creditColumnMap.seguroVidaPct ? `${creditColumnMap.seguroVidaPct} AS seguro_vida_pct` : `NULL AS seguro_vida_pct`,
+      creditColumnMap.seguroDanosPct ? `${creditColumnMap.seguroDanosPct} AS seguro_danos_pct` : `NULL AS seguro_danos_pct`,
+      creditColumnMap.comisionPct ? `${creditColumnMap.comisionPct} AS comision_pct` : `NULL AS comision_pct`,
+    ].join(', ');
+
+    const creditResult = await dbClient.query(
+      `SELECT ${selectList}
+       FROM op.creditos
+       WHERE ${creditColumnMap.id} = $1
+         AND ${creditColumnMap.estado} = 'PENDIENTE'
+       FOR UPDATE`,
+      [creditId],
+    );
+    if (creditResult.rowCount === 0) {
+      await dbClient.query('ROLLBACK');
+      return res.status(404).json({ success: false, message: 'Credito no encontrado o no esta pendiente' });
+    }
+
+    const credit = creditResult.rows[0];
+    const parsedObservaciones = safeParseJson(credit.observaciones, {});
+    const parsedCalculo = parsedObservaciones.calculo ?? {};
+
+    const parameters = await getFinancialParameters();
+    const seguroVidaPct = parseNumber(credit.seguro_vida_pct ?? parsedCalculo.seguroVidaPct, parameters.seguroVidaPct);
+    const seguroDanosPct = parseNumber(credit.seguro_danos_pct ?? parsedCalculo.seguroDanosPct, parameters.seguroDanosPct);
+    const comisionPct = parseNumber(credit.comision_pct ?? parsedCalculo.comisionPct, parameters.comisionPct);
+    const firstDueDate = credit.fecha_primer_vencimiento ? new Date(credit.fecha_primer_vencimiento) : addMonths(new Date(), 1);
+
+    const amortization = buildFrenchAmortization({
+      principal: parseNumber(credit.monto_solicitado),
+      annualRatePct: parseNumber(credit.tasa_interes),
+      termMonths: parseInt(credit.plazo_meses, 10),
+      firstDueDate,
+      seguroVidaPct,
+      seguroDanosPct,
+    });
+
+    const amortizationColumns = await getTableColumns(dbClient, 'op', 'amortizaciones');
+    const amortizationColumnMap = {
+      creditoId: pickExistingColumn(amortizationColumns, ['credito_id', 'loan_id']),
+      numeroCuota: pickExistingColumn(amortizationColumns, ['numero_cuota', 'payment_number']),
+      fechaVencimiento: pickExistingColumn(amortizationColumns, ['fecha_vencimiento', 'due_date']),
+      capital: pickExistingColumn(amortizationColumns, ['capital', 'principal_amount']),
+      interes: pickExistingColumn(amortizationColumns, ['interes', 'interest_amount']),
+      cuotaTotal: pickExistingColumn(amortizationColumns, ['cuota_total', 'total_amount']),
+      saldoCapital: pickExistingColumn(amortizationColumns, ['saldo_capital', 'balance_after_payment']),
+      estado: pickExistingColumn(amortizationColumns, ['estado', 'status']),
+      seguroVida: pickExistingColumn(amortizationColumns, ['seguro_vida', 'monto_seguro_vida']),
+      seguroDanos: pickExistingColumn(amortizationColumns, ['seguro_danos', 'seguro_danios', 'monto_seguro_danos', 'monto_seguro_danios']),
+    };
+    const requiredAmortizationColumns = [
+      amortizationColumnMap.creditoId,
+      amortizationColumnMap.numeroCuota,
+      amortizationColumnMap.fechaVencimiento,
+      amortizationColumnMap.capital,
+      amortizationColumnMap.interes,
+      amortizationColumnMap.cuotaTotal,
+      amortizationColumnMap.saldoCapital,
+    ];
+    if (requiredAmortizationColumns.some((column) => !column)) {
+      throw new Error('La tabla op.amortizaciones no tiene columnas minimas para generar plan');
+    }
+
+    await dbClient.query(`DELETE FROM op.amortizaciones WHERE ${amortizationColumnMap.creditoId} = $1`, [creditId]);
+
+    for (const row of amortization.rows) {
+      const amortizationPayload = {
+        [amortizationColumnMap.creditoId]: creditId,
+        [amortizationColumnMap.numeroCuota]: row.numeroCuota,
+        [amortizationColumnMap.fechaVencimiento]: row.fechaVencimiento,
+        [amortizationColumnMap.capital]: row.capital,
+        [amortizationColumnMap.interes]: row.interes,
+        [amortizationColumnMap.cuotaTotal]: row.cuotaTotal,
+        [amortizationColumnMap.saldoCapital]: row.saldoCapital,
+      };
+      if (amortizationColumnMap.estado) amortizationPayload[amortizationColumnMap.estado] = 'PENDIENTE';
+      if (amortizationColumnMap.seguroVida) amortizationPayload[amortizationColumnMap.seguroVida] = row.seguroVida;
+      if (amortizationColumnMap.seguroDanos) amortizationPayload[amortizationColumnMap.seguroDanos] = row.seguroDanos;
+      const { sql, values } = buildInsertQuery('op', 'amortizaciones', amortizationPayload);
+      await dbClient.query(sql, values);
+    }
+
+    const updateParts = [`${creditColumnMap.estado} = 'APROBADO'`];
+    const updateValues = [];
+    if (creditColumnMap.aprobadoPor) {
+      updateValues.push(userId);
+      updateParts.push(`${creditColumnMap.aprobadoPor} = $${updateValues.length}`);
+    }
+    if (creditColumnMap.fechaAprobacion) {
+      updateParts.push(`${creditColumnMap.fechaAprobacion} = NOW()`);
+    }
+    updateValues.push(creditId);
+    const whereParam = updateValues.length;
+
+    const updatedLoanResult = await dbClient.query(
       `UPDATE op.creditos
-       SET estado = 'APROBADO',
-           aprobado_por = $1,
-           fecha_aprobacion = NOW()
-       WHERE id = $2
-         AND estado = 'PENDIENTE'
-       RETURNING id, codigo, cliente_id, estado, fecha_aprobacion`,
-      [userId, creditId],
+       SET ${updateParts.join(', ')}
+       WHERE ${creditColumnMap.id} = $${whereParam}
+       RETURNING ${creditColumnMap.id} AS id,
+                 ${creditColumnMap.codigo ? `${creditColumnMap.codigo} AS codigo,` : `'N/A' AS codigo,`}
+                 ${creditColumnMap.clienteId ? `${creditColumnMap.clienteId} AS cliente_id,` : `NULL AS cliente_id,`}
+                 ${creditColumnMap.estado} AS estado
+                 ${creditColumnMap.fechaAprobacion ? `, ${creditColumnMap.fechaAprobacion} AS fecha_aprobacion` : ''}`,
+      updateValues,
     );
 
-    if (result.rowCount === 0) {
-      return res.status(404).json({
-        success: false,
-        message: 'Credito no encontrado o no esta pendiente',
-      });
-    }
+    await dbClient.query('COMMIT');
 
     res.json({
       success: true,
       message: 'Credito aprobado correctamente',
-      loan: result.rows[0],
+      loan: updatedLoanResult.rows[0],
+      calculation: {
+        cuotaReferencial: amortization.firstInstallmentAmount,
+        ...amortization.totals,
+        totalComision: round2(parseNumber(credit.monto_solicitado) * (comisionPct / 100)),
+      },
     });
   } catch (error) {
+    try {
+      await dbClient.query('ROLLBACK');
+    } catch {}
     console.error('Error aprobando credito:', error);
     res.status(500).json({
       success: false,
       message: 'Error aprobando credito',
       error: error.message,
     });
+  } finally {
+    dbClient.release();
   }
 };
 
