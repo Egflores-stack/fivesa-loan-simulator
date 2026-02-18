@@ -15,7 +15,94 @@ const addMonths = (date, months) => {
   return nextDate;
 };
 
+const addDays = (date, days) => {
+  const nextDate = new Date(date);
+  nextDate.setDate(nextDate.getDate() + days);
+  return nextDate;
+};
+
 const normalizeStatus = (status = '') => status.toString().trim().toUpperCase();
+
+const normalizeFrequency = (value = '') => {
+  const raw = String(value || '').trim().toUpperCase();
+  if (raw === 'SEMANAL' || raw === 'WEEKLY') return 'SEMANAL';
+  if (raw === 'QUINCENAL' || raw === 'BIWEEKLY' || raw === 'FORTNIGHTLY') return 'QUINCENAL';
+  if (raw === 'MENSUAL' || raw === 'MONTHLY') return 'MENSUAL';
+  return 'MENSUAL';
+};
+
+const toDbFrequency = (normalizedFrequency, columnName) => {
+  const frequency = normalizeFrequency(normalizedFrequency);
+  if (columnName === 'payment_frequency') {
+    if (frequency === 'SEMANAL') return 'weekly';
+    if (frequency === 'QUINCENAL') return 'biweekly';
+    return 'monthly';
+  }
+  return frequency;
+};
+
+const toDbLoanType = (rawLoanType, columnName) => {
+  const normalized = String(rawLoanType || '').trim().toUpperCase();
+  const mappedEs = {
+    PERSONAL: 'PERSONAL',
+    HIPOTECARIO: 'HIPOTECARIO',
+    COMERCIAL: 'COMERCIAL',
+    AUTOMOTRIZ: 'AUTOMOTRIZ',
+    NEGOCIOS: 'NEGOCIOS',
+    EDUCACION: 'EDUCACION',
+  };
+  const mappedEn = {
+    PERSONAL: 'personal',
+    HIPOTECARIO: 'hipotecario',
+    COMERCIAL: 'negocios',
+    AUTOMOTRIZ: 'automotriz',
+    NEGOCIOS: 'negocios',
+    EDUCACION: 'educacion',
+  };
+  if (columnName === 'loan_type') {
+    return mappedEn[normalized] ?? String(rawLoanType || 'personal').trim().toLowerCase();
+  }
+  return mappedEs[normalized] ?? String(rawLoanType || 'PERSONAL').trim().toUpperCase();
+};
+
+const toDbStatus = (normalizedStatus, columnName) => {
+  const raw = String(normalizedStatus || '').trim().toUpperCase();
+  if (columnName === 'status') {
+    if (raw === 'PENDIENTE') return 'pending';
+    if (raw === 'APROBADO') return 'approved';
+    if (raw === 'RECHAZADO') return 'rejected';
+    return 'pending';
+  }
+  if (raw === 'APROBADO' || raw === 'RECHAZADO' || raw === 'PENDIENTE') return raw;
+  return 'PENDIENTE';
+};
+
+const getFrequencyConfig = (frequency = 'MENSUAL') => {
+  const normalized = normalizeFrequency(frequency);
+  switch (normalized) {
+    case 'SEMANAL':
+      return {
+        normalized,
+        installmentsPerMonth: 4,
+        rateDivisor: 4,
+        addPeriod: (date, installments) => addDays(date, installments * 7),
+      };
+    case 'QUINCENAL':
+      return {
+        normalized,
+        installmentsPerMonth: 2,
+        rateDivisor: 2,
+        addPeriod: (date, installments) => addDays(date, installments * 15),
+      };
+    default:
+      return {
+        normalized: 'MENSUAL',
+        installmentsPerMonth: 1,
+        rateDivisor: 1,
+        addPeriod: (date, installments) => addMonths(date, installments),
+      };
+  }
+};
 
 const PARAMETER_CODES = {
   lifeInsurance: ['SEGURO_VIDA_PCT', 'CREDITO_SEGURO_VIDA_PCT'],
@@ -77,42 +164,48 @@ const buildFrenchAmortization = ({
   principal,
   annualRatePct,
   termMonths,
+  frequency,
   firstDueDate,
   seguroVidaPct,
   seguroDanosPct,
 }) => {
-  const monthlyRate = annualRatePct / 100 / 12;
+  const frequencyConfig = getFrequencyConfig(frequency);
+  const totalInstallments = Math.max(1, Math.round(termMonths * frequencyConfig.installmentsPerMonth));
+  const monthlyRate = annualRatePct / 100;
+  const periodicRate = monthlyRate / frequencyConfig.rateDivisor;
+  const periodicSeguroVidaRate = (seguroVidaPct / 100) / frequencyConfig.rateDivisor;
+  const periodicSeguroDanosRate = (seguroDanosPct / 100) / frequencyConfig.rateDivisor;
   const rows = [];
   let balance = principal;
 
   let baseInstallment = 0;
-  if (termMonths > 0) {
-    if (monthlyRate === 0) {
-      baseInstallment = principal / termMonths;
+  if (totalInstallments > 0) {
+    if (periodicRate === 0) {
+      baseInstallment = principal / totalInstallments;
     } else {
-      const factor = Math.pow(1 + monthlyRate, termMonths);
-      baseInstallment = (principal * monthlyRate * factor) / (factor - 1);
+      const factor = Math.pow(1 + periodicRate, totalInstallments);
+      baseInstallment = (principal * periodicRate * factor) / (factor - 1);
     }
   }
 
-  for (let installment = 1; installment <= termMonths; installment += 1) {
-    let interest = balance * monthlyRate;
+  for (let installment = 1; installment <= totalInstallments; installment += 1) {
+    let interest = balance * periodicRate;
     let capital = baseInstallment - interest;
 
-    if (installment === termMonths) {
+    if (installment === totalInstallments) {
       capital = balance;
       interest = baseInstallment - capital;
     }
 
-    const lifeInsurance = balance * (seguroVidaPct / 100);
-    const damageInsurance = balance * (seguroDanosPct / 100);
+    const lifeInsurance = balance * periodicSeguroVidaRate;
+    const damageInsurance = balance * periodicSeguroDanosRate;
     const payment = capital + interest + lifeInsurance + damageInsurance;
 
     balance = Math.max(0, balance - capital);
 
     rows.push({
       numeroCuota: installment,
-      fechaVencimiento: toDateOnly(addMonths(firstDueDate, installment - 1)),
+      fechaVencimiento: toDateOnly(frequencyConfig.addPeriod(firstDueDate, installment - 1)),
       capital: round2(capital),
       interes: round2(interest),
       seguroVida: round2(lifeInsurance),
@@ -202,11 +295,137 @@ const safeParseJson = (value, fallback = {}) => {
   }
 };
 
+const parseInteger = (value) => {
+  const parsed = parseInt(value, 10);
+  return Number.isInteger(parsed) ? parsed : null;
+};
+
+const resolveOrCreateClientId = async (dbClient, userId, body = {}) => {
+  const rawClientId = parseInteger(body.cliente_id ?? body.clientId);
+  const clientsColumns = await getTableColumns(dbClient, 'cl', 'clientes');
+  const clientsMap = {
+    id: pickExistingColumn(clientsColumns, ['id']),
+    identificacion: pickExistingColumn(clientsColumns, ['identificacion', 'dpi']),
+    tipoIdentificacion: pickExistingColumn(clientsColumns, ['tipo_identificacion']),
+    nombres: pickExistingColumn(clientsColumns, ['nombres', 'first_name']),
+    apellidos: pickExistingColumn(clientsColumns, ['apellidos', 'last_name']),
+    telefono: pickExistingColumn(clientsColumns, ['telefono', 'phone']),
+    email: pickExistingColumn(clientsColumns, ['email']),
+    direccion: pickExistingColumn(clientsColumns, ['direccion', 'address']),
+    ocupacion: pickExistingColumn(clientsColumns, ['ocupacion', 'employment_status']),
+    ingresoMensual: pickExistingColumn(clientsColumns, ['ingreso_mensual', 'monthly_income']),
+    estadoCivil: pickExistingColumn(clientsColumns, ['estado_civil']),
+    asesorId: pickExistingColumn(clientsColumns, ['asesor_id', 'created_by']),
+    activo: pickExistingColumn(clientsColumns, ['activo', 'is_active']),
+  };
+
+  if (rawClientId && rawClientId > 0) {
+    const whereActive = clientsMap.activo ? ` AND ${clientsMap.activo} = true` : '';
+    const result = await dbClient.query(
+      `SELECT ${clientsMap.id ?? 'id'} AS id
+       FROM cl.clientes
+       WHERE ${clientsMap.id ?? 'id'} = $1${whereActive}
+       LIMIT 1`,
+      [rawClientId],
+    );
+    if (result.rowCount > 0) {
+      return Number(result.rows[0].id);
+    }
+  }
+
+  const incomingClient = body.cliente ?? {};
+  const fivesaProfile = {
+    direccion: incomingClient.direccion ?? incomingClient.address ?? null,
+    telefono_1: incomingClient.telefono_1 ?? incomingClient.telefono ?? incomingClient.phone ?? null,
+    telefono_2: incomingClient.telefono_2 ?? null,
+    actividad_economica: incomingClient.actividad_economica ?? incomingClient.ocupacion ?? null,
+    lugar_trabajo: incomingClient.lugar_trabajo ?? null,
+    antiguedad_laboral: incomingClient.antiguedad_laboral ?? null,
+    salario_bruto: parseNumber(incomingClient.salario_bruto ?? incomingClient.ingreso_mensual ?? incomingClient.monthly_income, null),
+    inss: parseNumber(incomingClient.inss, null),
+    ir: parseNumber(incomingClient.ir, null),
+    egreso_alquiler: parseNumber(incomingClient.egreso_alquiler, null),
+    egreso_servicios: parseNumber(incomingClient.egreso_servicios, null),
+    egreso_alimentacion: parseNumber(incomingClient.egreso_alimentacion, null),
+    garantia_descripcion: incomingClient.garantia_descripcion ?? null,
+    referencia_1_nombre: incomingClient.referencia_1_nombre ?? null,
+    referencia_1_telefono: incomingClient.referencia_1_telefono ?? null,
+    referencia_2_nombre: incomingClient.referencia_2_nombre ?? null,
+    referencia_2_telefono: incomingClient.referencia_2_telefono ?? null,
+  };
+  const identificacion = incomingClient.identificacion ?? incomingClient.dpi ?? null;
+  const nombres = incomingClient.nombres ?? incomingClient.first_name ?? null;
+  const apellidos = incomingClient.apellidos ?? incomingClient.last_name ?? null;
+  const email = incomingClient.email ?? null;
+
+  if (!identificacion || !nombres || !apellidos) {
+    return null;
+  }
+
+  if (clientsMap.identificacion) {
+    const byIdentification = await dbClient.query(
+      `SELECT ${clientsMap.id ?? 'id'} AS id
+       FROM cl.clientes
+       WHERE ${clientsMap.identificacion} = $1
+       LIMIT 1`,
+      [identificacion],
+    );
+    if (byIdentification.rowCount > 0) {
+      return Number(byIdentification.rows[0].id);
+    }
+  }
+
+  if (email && clientsMap.email) {
+    const byEmail = await dbClient.query(
+      `SELECT ${clientsMap.id ?? 'id'} AS id
+       FROM cl.clientes
+       WHERE ${clientsMap.email} = $1
+       LIMIT 1`,
+      [email],
+    );
+    if (byEmail.rowCount > 0) {
+      return Number(byEmail.rows[0].id);
+    }
+  }
+
+  const clientPayload = {};
+  if (clientsMap.identificacion) clientPayload[clientsMap.identificacion] = identificacion;
+  if (clientsMap.tipoIdentificacion) clientPayload[clientsMap.tipoIdentificacion] = incomingClient.tipo_identificacion ?? 'DNI';
+  if (clientsMap.nombres) clientPayload[clientsMap.nombres] = nombres;
+  if (clientsMap.apellidos) clientPayload[clientsMap.apellidos] = apellidos;
+  if (clientsMap.telefono) clientPayload[clientsMap.telefono] = incomingClient.telefono ?? incomingClient.phone ?? null;
+  if (clientsMap.email) clientPayload[clientsMap.email] = email;
+  if (clientsMap.direccion) clientPayload[clientsMap.direccion] = fivesaProfile.direccion;
+  if (clientsMap.ocupacion) clientPayload[clientsMap.ocupacion] = fivesaProfile.actividad_economica ?? incomingClient.employment_status ?? null;
+  if (clientsMap.ingresoMensual) clientPayload[clientsMap.ingresoMensual] = fivesaProfile.salario_bruto;
+  if (clientsMap.estadoCivil) clientPayload[clientsMap.estadoCivil] = JSON.stringify({ fivesa_profile: fivesaProfile });
+  if (clientsMap.asesorId) clientPayload[clientsMap.asesorId] = userId;
+  if (clientsMap.activo) clientPayload[clientsMap.activo] = true;
+
+  const requiredClientColumns = [clientsMap.identificacion, clientsMap.nombres, clientsMap.apellidos];
+  if (requiredClientColumns.some((column) => !column)) {
+    throw new Error('La tabla cl.clientes no tiene columnas suficientes para crear cliente');
+  }
+
+  const { sql, values } = buildInsertQuery('cl', 'clientes', clientPayload);
+  const insertResult = await dbClient.query(
+    `${sql} RETURNING ${clientsMap.id ?? 'id'} AS id`,
+    values,
+  );
+
+  if (insertResult.rowCount === 0) {
+    return null;
+  }
+
+  return Number(insertResult.rows[0].id);
+};
+
 export const calculateLoan = async (req, res) => {
   try {
     const principal = parseNumber(req.body.amount ?? req.body.monto_solicitado, 0);
     const termMonths = parseInt(req.body.termMonths ?? req.body.plazo_meses, 10);
     const annualRatePct = parseNumber(req.body.annualRate ?? req.body.tasa_interes, 0);
+    const frequency = normalizeFrequency(req.body.frecuencia ?? req.body.frequency);
     const firstDueDate = req.body.firstDueDate
       ? new Date(req.body.firstDueDate)
       : addMonths(new Date(), 1);
@@ -228,6 +447,7 @@ export const calculateLoan = async (req, res) => {
       principal,
       annualRatePct,
       termMonths,
+      frequency,
       firstDueDate,
       seguroVidaPct,
       seguroDanosPct,
@@ -241,6 +461,8 @@ export const calculateLoan = async (req, res) => {
         montoSolicitado: round2(principal),
         tasaInteresAnual: round2(annualRatePct),
         plazoMeses: termMonths,
+        frecuencia: frequency,
+        numeroCuotas: amortization.rows.length,
         cuotaReferencial: amortization.firstInstallmentAmount,
         totalComision,
         ...amortization.totals,
@@ -265,11 +487,14 @@ export const calculateLoan = async (req, res) => {
 export const createLoan = async (req, res) => {
   const dbClient = await pool.connect();
   try {
+    await dbClient.query('BEGIN');
+
     const userId = req.userId;
-    const clienteId = parseInt(req.body.cliente_id ?? req.body.clientId, 10);
+    const requestedClientId = parseInteger(req.body.cliente_id ?? req.body.clientId);
     const montoSolicitado = parseNumber(req.body.monto_solicitado ?? req.body.amountRequested, 0);
     const tasaInteres = parseNumber(req.body.tasa_interes ?? req.body.annualInterestRate, 0);
     const plazoMeses = parseInt(req.body.plazo_meses ?? req.body.termMonths, 10);
+    const frecuencia = normalizeFrequency(req.body.frecuencia ?? req.body.frequency);
     const tipoCredito = req.body.tipo_credito ?? req.body.loanType ?? 'PERSONAL';
     const destino = req.body.destino ?? req.body.purpose ?? null;
     const observacionesEntrada = req.body.observaciones ?? null;
@@ -277,19 +502,30 @@ export const createLoan = async (req, res) => {
       ? new Date(req.body.firstDueDate)
       : addMonths(new Date(), 1);
 
-    if (!Number.isInteger(clienteId) || clienteId <= 0) {
-      return res.status(400).json({ success: false, message: 'cliente_id es obligatorio' });
-    }
     if (montoSolicitado <= 0 || tasaInteres < 0 || !Number.isInteger(plazoMeses) || plazoMeses <= 0) {
-      return res.status(400).json({ success: false, message: 'Datos del credito invalidos' });
+      await dbClient.query('ROLLBACK');
+      return res.status(400).json({
+        success: false,
+        code: 'VALIDATION_ERROR',
+        message: 'Datos del credito invalidos',
+        fieldErrors: {
+          ...(montoSolicitado > 0 ? {} : { monto_solicitado: 'El monto debe ser mayor que 0' }),
+          ...(tasaInteres >= 0 ? {} : { tasa_interes: 'La tasa no puede ser negativa' }),
+          ...(Number.isInteger(plazoMeses) && plazoMeses > 0 ? {} : { plazo_meses: 'El plazo debe ser mayor que 0' }),
+        },
+      });
     }
 
-    const customerExists = await dbClient.query(
-      'SELECT id FROM cl.clientes WHERE id = $1 AND activo = true',
-      [clienteId],
-    );
-    if (customerExists.rowCount === 0) {
-      return res.status(404).json({ success: false, message: 'Cliente no encontrado' });
+    const clienteId = await resolveOrCreateClientId(dbClient, userId, req.body);
+    if (!Number.isInteger(clienteId) || clienteId <= 0) {
+      await dbClient.query('ROLLBACK');
+      return res.status(requestedClientId ? 404 : 400).json({
+        success: false,
+        code: requestedClientId ? 'CLIENT_NOT_FOUND' : 'VALIDATION_ERROR',
+        message: requestedClientId
+          ? 'Cliente no encontrado'
+          : 'No fue posible vincular la solicitud con un cliente valido',
+      });
     }
 
     const parameters = await getFinancialParameters();
@@ -301,6 +537,7 @@ export const createLoan = async (req, res) => {
       principal: montoSolicitado,
       annualRatePct: tasaInteres,
       termMonths: plazoMeses,
+      frequency: frecuencia,
       firstDueDate,
       seguroVidaPct,
       seguroDanosPct,
@@ -311,15 +548,18 @@ export const createLoan = async (req, res) => {
       seguroVidaPct: round2(seguroVidaPct),
       seguroDanosPct: round2(seguroDanosPct),
       comisionPct: round2(comisionPct),
+      frecuencia,
       totalComision,
     };
     const observaciones = JSON.stringify({
       nota: observacionesEntrada,
       calculo: metadata,
+      perfil: req.body.perfil ?? null,
       analisis: req.body.analisis ?? null,
+      garantias: req.body.garantias ?? [],
+      referencias: req.body.referencias ?? [],
+      cliente: req.body.cliente ?? null,
     });
-
-    await dbClient.query('BEGIN');
 
     const codigo = await generateCreditCode(dbClient);
     const creditColumns = await getTableColumns(dbClient, 'op', 'creditos');
@@ -332,6 +572,7 @@ export const createLoan = async (req, res) => {
       tasaInteres: pickExistingColumn(creditColumns, ['tasa_interes', 'annual_interest_rate']),
       plazoMeses: pickExistingColumn(creditColumns, ['plazo_meses', 'term_months']),
       tipoCredito: pickExistingColumn(creditColumns, ['tipo_credito', 'loan_type']),
+      frecuenciaPago: pickExistingColumn(creditColumns, ['frecuencia_pago', 'payment_frequency']),
       destino: pickExistingColumn(creditColumns, ['destino', 'purpose']),
       estado: pickExistingColumn(creditColumns, ['estado', 'status']),
       observaciones: pickExistingColumn(creditColumns, ['observaciones', 'notes']),
@@ -362,12 +603,20 @@ export const createLoan = async (req, res) => {
       [creditColumnMap.montoSolicitado]: montoSolicitado,
       [creditColumnMap.tasaInteres]: tasaInteres,
       [creditColumnMap.plazoMeses]: plazoMeses,
-      [creditColumnMap.tipoCredito]: tipoCredito,
+      [creditColumnMap.tipoCredito]: toDbLoanType(tipoCredito, creditColumnMap.tipoCredito),
     };
 
     if (creditColumnMap.codigo) creditPayload[creditColumnMap.codigo] = codigo;
     if (creditColumnMap.destino) creditPayload[creditColumnMap.destino] = destino;
-    if (creditColumnMap.estado) creditPayload[creditColumnMap.estado] = 'PENDIENTE';
+    if (creditColumnMap.frecuenciaPago) {
+      creditPayload[creditColumnMap.frecuenciaPago] = toDbFrequency(
+        frecuencia,
+        creditColumnMap.frecuenciaPago,
+      );
+    }
+    if (creditColumnMap.estado) {
+      creditPayload[creditColumnMap.estado] = toDbStatus('PENDIENTE', creditColumnMap.estado);
+    }
     if (creditColumnMap.observaciones) creditPayload[creditColumnMap.observaciones] = observaciones;
     if (creditColumnMap.asesorId) creditPayload[creditColumnMap.asesorId] = userId;
     if (creditColumnMap.cuotaReferencial) creditPayload[creditColumnMap.cuotaReferencial] = amortization.firstInstallmentAmount;
@@ -409,6 +658,7 @@ export const createLoan = async (req, res) => {
         monto_solicitado: round2(montoSolicitado),
         tasa_interes: round2(tasaInteres),
         plazo_meses: plazoMeses,
+        frecuencia,
         estado: creditRow[creditColumnMap.estado ?? 'estado'] ?? 'PENDIENTE',
         fecha_solicitud: creditRow[creditColumnMap.fechaSolicitud ?? 'fecha_solicitud'] ?? null,
       },
@@ -419,10 +669,64 @@ export const createLoan = async (req, res) => {
       },
     });
   } catch (error) {
-    await dbClient.query('ROLLBACK');
+    try {
+      await dbClient.query('ROLLBACK');
+    } catch {}
+
+    if (error?.code === '23505') {
+      const detail = String(error?.detail ?? '').toLowerCase();
+      const isEmail = detail.includes('email');
+      const isIdentification = detail.includes('identificacion');
+      return res.status(400).json({
+        success: false,
+        code: isEmail ? 'DUPLICATE_EMAIL' : isIdentification ? 'DUPLICATE_IDENTIFICACION' : 'INTEGRITY_ERROR',
+        message: isEmail
+          ? 'El correo ya existe'
+          : isIdentification
+            ? 'La cedula ya existe'
+            : 'No se pudo completar la operacion por restriccion de integridad',
+        fieldErrors: {
+          ...(isEmail ? { 'cliente.email': 'El correo ya existe' } : {}),
+          ...(isIdentification ? { 'cliente.identificacion': 'La cedula ya existe' } : {}),
+        },
+      });
+    }
+
+    if (error?.code === '23514') {
+      const detail = String(error?.detail ?? '').toLowerCase();
+      const isFrequency = detail.includes('payment_frequency') || detail.includes('frecuencia');
+      return res.status(400).json({
+        success: false,
+        code: 'VALIDATION_ERROR',
+        message: isFrequency
+          ? 'La frecuencia de pago no es valida para la configuracion actual'
+          : 'Los datos enviados no cumplen una validacion de integridad',
+        fieldErrors: isFrequency ? { frecuencia: 'Frecuencia invalida' } : {},
+      });
+    }
+
+    if (error?.code === '23502') {
+      const column = error?.column ? String(error.column) : null;
+      return res.status(400).json({
+        success: false,
+        code: 'VALIDATION_ERROR',
+        message: 'Faltan campos obligatorios para registrar la solicitud',
+        fieldErrors: column ? { [column]: `El campo ${column} es obligatorio` } : {},
+      });
+    }
+
+    if (error?.message?.includes('columnas')) {
+      return res.status(500).json({
+        success: false,
+        code: 'INTEGRITY_ERROR',
+        message: error.message,
+      });
+    }
+
     console.error('Error creando credito:', error);
     res.status(500).json({
       success: false,
+      code: 'INTERNAL_ERROR',
       message: 'Error creando la solicitud de credito',
       error: error.message,
     });
@@ -450,6 +754,7 @@ export const approveLoan = async (req, res) => {
       montoSolicitado: pickExistingColumn(creditColumns, ['monto_solicitado', 'amount_requested', 'monto']),
       tasaInteres: pickExistingColumn(creditColumns, ['tasa_interes', 'annual_interest_rate']),
       plazoMeses: pickExistingColumn(creditColumns, ['plazo_meses', 'term_months']),
+      frecuenciaPago: pickExistingColumn(creditColumns, ['frecuencia_pago', 'payment_frequency']),
       estado: pickExistingColumn(creditColumns, ['estado', 'status']),
       aprobadoPor: pickExistingColumn(creditColumns, ['aprobado_por', 'approved_by']),
       fechaAprobacion: pickExistingColumn(creditColumns, ['fecha_aprobacion', 'approval_date']),
@@ -482,6 +787,7 @@ export const approveLoan = async (req, res) => {
         ? `${creditColumnMap.fechaPrimerVencimiento} AS fecha_primer_vencimiento`
         : `NULL AS fecha_primer_vencimiento`,
       creditColumnMap.observaciones ? `${creditColumnMap.observaciones} AS observaciones` : `NULL AS observaciones`,
+      creditColumnMap.frecuenciaPago ? `${creditColumnMap.frecuenciaPago} AS frecuencia_pago` : `NULL AS frecuencia_pago`,
       creditColumnMap.seguroVidaPct ? `${creditColumnMap.seguroVidaPct} AS seguro_vida_pct` : `NULL AS seguro_vida_pct`,
       creditColumnMap.seguroDanosPct ? `${creditColumnMap.seguroDanosPct} AS seguro_danos_pct` : `NULL AS seguro_danos_pct`,
       creditColumnMap.comisionPct ? `${creditColumnMap.comisionPct} AS comision_pct` : `NULL AS comision_pct`,
@@ -503,6 +809,7 @@ export const approveLoan = async (req, res) => {
     const credit = creditResult.rows[0];
     const parsedObservaciones = safeParseJson(credit.observaciones, {});
     const parsedCalculo = parsedObservaciones.calculo ?? {};
+    const frecuencia = normalizeFrequency(credit.frecuencia_pago ?? parsedCalculo.frecuencia ?? 'MENSUAL');
 
     const parameters = await getFinancialParameters();
     const seguroVidaPct = parseNumber(credit.seguro_vida_pct ?? parsedCalculo.seguroVidaPct, parameters.seguroVidaPct);
@@ -514,6 +821,7 @@ export const approveLoan = async (req, res) => {
       principal: parseNumber(credit.monto_solicitado),
       annualRatePct: parseNumber(credit.tasa_interes),
       termMonths: parseInt(credit.plazo_meses, 10),
+      frequency: frecuencia,
       firstDueDate,
       seguroVidaPct,
       seguroDanosPct,

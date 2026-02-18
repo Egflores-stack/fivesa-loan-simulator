@@ -1,11 +1,28 @@
 import { query } from '../db.js';
 
+const parseProfileExtras = (rawEstadoCivil) => {
+  if (!rawEstadoCivil || typeof rawEstadoCivil !== 'string') return {};
+  try {
+    const parsed = JSON.parse(rawEstadoCivil);
+    if (parsed && typeof parsed === 'object' && parsed.fivesa_profile && typeof parsed.fivesa_profile === 'object') {
+      return parsed.fivesa_profile;
+    }
+    return {};
+  } catch {
+    return {};
+  }
+};
+
 const normalizeClient = (row) => ({
+  ...(parseProfileExtras(row.estado_civil)),
   ...row,
   full_name: `${row.nombres} ${row.apellidos}`.trim(),
   first_name: row.nombres,
   last_name: row.apellidos,
   dpi: row.identificacion,
+  nombre: `${row.nombres} ${row.apellidos}`.trim(),
+  cedula: row.identificacion,
+  telefono_1: row.telefono,
   monthly_income: row.ingreso_mensual,
   phone: row.telefono,
   birth_date: row.fecha_nacimiento,
@@ -21,11 +38,21 @@ export const registerClient = async (req, res) => {
     if (!identificacion || !nombres || !apellidos) {
       return res.status(400).json({
         success: false,
+        code: 'VALIDATION_ERROR',
         message: 'identificacion, nombres y apellidos son obligatorios',
+        fieldErrors: {
+          ...(identificacion ? {} : { identificacion: 'La identificacion es obligatoria' }),
+          ...(nombres ? {} : { nombres: 'Los nombres son obligatorios' }),
+          ...(apellidos ? {} : { apellidos: 'Los apellidos son obligatorios' }),
+        },
       });
     }
 
     const email = req.body.email ?? null;
+    const fivesaProfile = req.body.fivesa_profile ?? {};
+    const encodedEstadoCivil = JSON.stringify({
+      fivesa_profile: fivesaProfile,
+    });
 
     const existingIdentification = await query(
       'SELECT id FROM cl.clientes WHERE identificacion = $1',
@@ -35,7 +62,11 @@ export const registerClient = async (req, res) => {
     if (existingIdentification.rowCount > 0) {
       return res.status(400).json({
         success: false,
+        code: 'DUPLICATE_IDENTIFICACION',
         message: 'Ya existe un cliente con esta identificacion',
+        fieldErrors: {
+          identificacion: 'La cedula ya existe',
+        },
       });
     }
 
@@ -48,7 +79,11 @@ export const registerClient = async (req, res) => {
       if (existingEmail.rowCount > 0) {
         return res.status(400).json({
           success: false,
+          code: 'DUPLICATE_EMAIL',
           message: 'Ya existe un cliente con este email',
+          fieldErrors: {
+            email: 'El correo ya existe',
+          },
         });
       }
     }
@@ -72,7 +107,7 @@ export const registerClient = async (req, res) => {
         req.body.direccion ?? req.body.address ?? null,
         req.body.ocupacion ?? req.body.employment_status ?? null,
         req.body.ingreso_mensual ?? req.body.monthly_income ?? null,
-        req.body.estado_civil ?? null,
+        encodedEstadoCivil,
         userId,
       ],
     );
@@ -84,9 +119,71 @@ export const registerClient = async (req, res) => {
     });
   } catch (error) {
     console.error('Error registrando cliente:', error);
+    if (error?.code === '23505') {
+      const detail = String(error?.detail ?? '').toLowerCase();
+      const isEmail = detail.includes('email');
+      return res.status(400).json({
+        success: false,
+        code: isEmail ? 'DUPLICATE_EMAIL' : 'DUPLICATE_IDENTIFICACION',
+        message: isEmail ? 'Ya existe un cliente con este email' : 'Ya existe un cliente con esta identificacion',
+        fieldErrors: {
+          [isEmail ? 'email' : 'identificacion']: isEmail ? 'El correo ya existe' : 'La cedula ya existe',
+        },
+      });
+    }
     res.status(500).json({
       success: false,
+      code: 'INTERNAL_ERROR',
       message: 'Error registrando cliente',
+      error: error.message,
+    });
+  }
+};
+
+export const checkClientExists = async (req, res) => {
+  try {
+    const identificacion = String(req.query.identificacion ?? '').trim();
+    const email = String(req.query.email ?? '').trim();
+
+    if (!identificacion && !email) {
+      return res.status(400).json({
+        success: false,
+        code: 'VALIDATION_ERROR',
+        message: 'Debes enviar identificacion o email para validar',
+      });
+    }
+
+    let byIdentification = null;
+    let byEmail = null;
+
+    if (identificacion) {
+      const result = await query(
+        'SELECT id FROM cl.clientes WHERE identificacion = $1 LIMIT 1',
+        [identificacion],
+      );
+      byIdentification = result.rows[0] ?? null;
+    }
+
+    if (email) {
+      const result = await query(
+        'SELECT id FROM cl.clientes WHERE email = $1 LIMIT 1',
+        [email],
+      );
+      byEmail = result.rows[0] ?? null;
+    }
+
+    res.json({
+      success: true,
+      existsByIdentificacion: Boolean(byIdentification),
+      existsByEmail: Boolean(byEmail),
+      clientId: byIdentification?.id ?? byEmail?.id ?? null,
+    });
+  } catch (error) {
+    console.error('Error validando existencia de cliente:', error);
+    res.status(500).json({
+      success: false,
+      code: 'INTERNAL_ERROR',
+      message: 'Error validando cliente',
       error: error.message,
     });
   }
@@ -232,6 +329,11 @@ export const updateClient = async (req, res) => {
         values.push(value);
         setClause.push(`${column} = $${values.length}`);
       }
+    }
+
+    if (req.body.fivesa_profile && typeof req.body.fivesa_profile === 'object') {
+      values.push(JSON.stringify({ fivesa_profile: req.body.fivesa_profile }));
+      setClause.push(`estado_civil = $${values.length}`);
     }
 
     if (setClause.length === 0) {

@@ -88,6 +88,15 @@ const App = () => {
                   </ProtectedRoute>
                 }
               />
+
+              <Route
+                path="/requests/new"
+                element={
+                  <ProtectedRoute>
+                    <Requests />
+                  </ProtectedRoute>
+                }
+              />
               
               <Route
                 path="/config"

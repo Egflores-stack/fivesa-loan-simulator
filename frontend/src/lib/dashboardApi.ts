@@ -12,11 +12,38 @@ const getAuthHeaders = () => ({
   'Authorization': `Bearer ${getToken()}`
 });
 
+export class ApiRequestError extends Error {
+  status;
+  code;
+  fieldErrors;
+  raw;
+
+  constructor(message, options = {}) {
+    super(message);
+    this.name = 'ApiRequestError';
+    this.status = options.status || 500;
+    this.code = options.code || 'INTERNAL_ERROR';
+    this.fieldErrors = options.fieldErrors || {};
+    this.raw = options.raw || null;
+  }
+}
+
 // Manejo de errores
 const handleResponse = async (response) => {
   if (!response.ok) {
     const error = await response.json().catch(() => ({ message: 'Error de conexion' }));
-    throw new Error(error.message || 'Error en la solicitud');
+    if (response.status === 401) {
+      localStorage.removeItem(AUTH_STORAGE_KEY);
+      if (window.location.pathname !== '/login') {
+        window.location.replace('/login');
+      }
+    }
+    throw new ApiRequestError(error.message || 'Error en la solicitud', {
+      status: response.status,
+      code: error.code,
+      fieldErrors: error.fieldErrors,
+      raw: error,
+    });
   }
   return response.json();
 };
@@ -43,6 +70,35 @@ export const getClients = async () => {
     return await handleResponse(response);
   } catch (error) {
     console.error('Error obteniendo clientes:', error);
+    throw error;
+  }
+};
+
+export const getClientById = async (clientId) => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/clients/${clientId}`, {
+      headers: getAuthHeaders()
+    });
+    return await handleResponse(response);
+  } catch (error) {
+    console.error('Error obteniendo detalle de cliente:', error);
+    throw error;
+  }
+};
+
+export const checkClientExists = async ({ identificacion, email }) => {
+  try {
+    const params = new URLSearchParams();
+    if (identificacion) params.set('identificacion', identificacion);
+    if (email) params.set('email', email);
+    const query = params.toString();
+    const response = await fetch(
+      `${API_BASE_URL}/clients/exists${query ? `?${query}` : ''}`,
+      { headers: getAuthHeaders() },
+    );
+    return await handleResponse(response);
+  } catch (error) {
+    console.error('Error validando cliente existente:', error);
     throw error;
   }
 };

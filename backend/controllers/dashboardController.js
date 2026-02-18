@@ -15,7 +15,9 @@ export const getDashboardStats = async (req, res) => {
     const [totalsResult, monthlyResult, recentResult] = await Promise.all([
       query(
         `SELECT
-           (SELECT COUNT(*)::int FROM cl.clientes WHERE activo = true) AS total_clients,
+           (SELECT COUNT(DISTINCT c.cliente_id)::int
+            FROM op.creditos c
+            WHERE UPPER(TRIM(c.estado)) = 'APROBADO') AS total_clients,
            (SELECT COUNT(*)::int FROM op.creditos) AS total_loans,
            (SELECT COUNT(*)::int FROM op.creditos WHERE estado = 'PENDIENTE') AS pending_loans,
            (SELECT COUNT(*)::int FROM op.creditos WHERE estado = 'APROBADO') AS approved_loans,

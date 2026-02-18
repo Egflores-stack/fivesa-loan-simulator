@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { Link, NavLink, useNavigate } from "react-router-dom";
-import { Banknote, Calculator, FileText, LayoutDashboard, LogOut, Menu, Users } from "lucide-react";
+import { Banknote, Calculator, FilePlus2, FileText, LayoutDashboard, LogOut, Menu, Users } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
@@ -13,9 +13,10 @@ type AppLayoutProps = {
 
 const navItems = [
   { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { to: "/clients", label: "Clientes", icon: Users },
-  { to: "/simulator", label: "Nuevo Credito", icon: Calculator },
-  { to: "/requests", label: "Solicitudes", icon: FileText },
+  { to: "/clients", label: "Perfil de Cliente", icon: Users },
+  { to: "/simulator", label: "Simulador", icon: Calculator },
+  { to: "/requests/new", label: "Nueva Solicitud", icon: FilePlus2 },
+  { to: "/requests", label: "Bandeja de Solicitudes", icon: FileText, end: true },
 ];
 
 const navLinkClass = ({ isActive }: { isActive: boolean }) =>
@@ -30,7 +31,6 @@ const SidebarContent = ({ onNavigate }: { onNavigate?: () => void }) => {
   const navigate = useNavigate();
 
   const handleLogout = async () => {
-    localStorage.clear();
     await logout();
     navigate("/login", { replace: true });
   };
@@ -51,7 +51,7 @@ const SidebarContent = ({ onNavigate }: { onNavigate?: () => void }) => {
 
       <nav className="space-y-2">
         {navItems.map((item) => (
-          <NavLink key={item.to} to={item.to} className={navLinkClass} onClick={onNavigate}>
+          <NavLink key={item.to} to={item.to} end={Boolean((item as { end?: boolean }).end)} className={navLinkClass} onClick={onNavigate}>
             <item.icon className="h-4 w-4" />
             <span>{item.label}</span>
           </NavLink>

@@ -9,7 +9,8 @@ import {
     registerClient, 
     getAllClients, 
     getClientById, 
-    updateClient 
+    updateClient,
+    checkClientExists,
 } from './controllers/clientController.js';
 
 import { 
@@ -47,6 +48,7 @@ app.get('/api/dashboard/stats', verifyToken, getDashboardStats);
 // Clientes
 app.post('/api/clients', verifyToken, registerClient);
 app.get('/api/clients', verifyToken, getAllClients);
+app.get('/api/clients/exists', verifyToken, checkClientExists);
 app.get('/api/clients/:id', verifyToken, getClientById);
 app.put('/api/clients/:id', verifyToken, updateClient);
 
