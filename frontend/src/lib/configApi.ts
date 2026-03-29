@@ -4,7 +4,15 @@ const API_BASE_URL =
 export type ConfigUser = {
   id: string;
   email: string;
+  username: string;
+  first_name: string;
+  last_name: string;
+  full_name: string;
+  company: string;
+  access_type: string;
+  description: string;
   role: string;
+  is_super_admin?: boolean;
   created_at: string;
 };
 
@@ -14,15 +22,32 @@ export type Parameters = {
 };
 
 type CreateUserPayload = {
+  username: string;
+  first_name: string;
+  last_name: string;
   email: string;
+  company: string;
+  access_type: string;
+  description: string;
   role: string;
   password: string;
 };
 
 type UpdateUserPayload = {
+  username?: string;
+  first_name?: string;
+  last_name?: string;
   email?: string;
+  company?: string;
+  access_type?: string;
+  description?: string;
   role?: string;
   password?: string;
+};
+
+type ChangeOwnPasswordPayload = {
+  currentPassword: string;
+  newPassword: string;
 };
 
 const buildHeaders = (token?: string) => ({
@@ -137,4 +162,19 @@ export const updateParameters = async (
     diasMoraVencido: data.parameters.dias_mora_vencido,
     cuotasVencido: data.parameters.cuotas_vencido,
   };
+};
+
+export const changeOwnPassword = async (
+  payload: ChangeOwnPasswordPayload,
+  token: string,
+): Promise<void> => {
+  const response = await fetch(`${API_BASE_URL}/api/auth/change-password`, {
+    method: "POST",
+    headers: buildHeaders(token),
+    body: JSON.stringify(payload),
+  });
+
+  if (!response.ok) {
+    throw new Error(await parseError(response));
+  }
 };

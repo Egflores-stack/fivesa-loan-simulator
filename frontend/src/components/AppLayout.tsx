@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { Link, NavLink, useNavigate } from "react-router-dom";
-import { Banknote, Calculator, FilePlus2, FileText, LayoutDashboard, LogOut, Menu, Users } from "lucide-react";
+import { ArrowLeft, Banknote, Calculator, FilePlus2, FileText, LayoutDashboard, LogOut, Menu, ReceiptText, Settings, Shield, Users } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
@@ -17,6 +17,8 @@ const navItems = [
   { to: "/simulator", label: "Simulador", icon: Calculator },
   { to: "/requests/new", label: "Nueva Solicitud", icon: FilePlus2 },
   { to: "/requests", label: "Bandeja de Solicitudes", icon: FileText, end: true },
+  { to: "/reports", label: "Reporteria", icon: ReceiptText },
+  { to: "/config", label: "Configuracion", icon: Settings },
 ];
 
 const navLinkClass = ({ isActive }: { isActive: boolean }) =>
@@ -26,9 +28,19 @@ const navLinkClass = ({ isActive }: { isActive: boolean }) =>
       : "text-gray-600 hover:bg-cyan-50 hover:text-cyan-700"
   }`;
 
+const exchangeRate = Number(import.meta.env.VITE_BCN_OFFICIAL_RATE || "36.6243");
+
 const SidebarContent = ({ onNavigate }: { onNavigate?: () => void }) => {
   const { logout, user } = useAuth();
   const navigate = useNavigate();
+  const canAuthorize = user?.role === "Administrador" || user?.role === "Supervisor";
+  const isSuperAdmin = Boolean(user?.is_super_admin) || user?.username?.toLowerCase() === "emathews";
+  const baseNavItems = isSuperAdmin
+    ? navItems
+    : navItems.filter((item) => item.to !== "/config");
+  const visibleNavItems = canAuthorize
+    ? [...baseNavItems.slice(0, 5), { to: "/authorizations", label: "Autorizaciones", icon: Shield }, ...baseNavItems.slice(5)]
+    : baseNavItems;
 
   const handleLogout = async () => {
     await logout();
@@ -49,8 +61,35 @@ const SidebarContent = ({ onNavigate }: { onNavigate?: () => void }) => {
         <p className="text-xs text-gray-500">Sistema de Simulacion Crediticia</p>
       </div>
 
+      <div className="mb-4 rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
+        <p className="text-xs font-semibold uppercase tracking-[0.2em] text-cyan-600">
+          Usuario Conectado
+        </p>
+        <p className="mt-2 text-sm font-semibold text-gray-900">
+          {user?.full_name || user?.username || user?.email || "Sin usuario"}
+        </p>
+        <p className="mt-1 text-xs text-gray-500">
+          Usuario: {user?.username || "-"}
+        </p>
+        <p className="mt-1 text-xs text-gray-500">
+          Rol: {user?.role || "-"}
+        </p>
+      </div>
+
+      <div className="mb-6 rounded-2xl border border-emerald-100 bg-gradient-to-r from-emerald-50 to-lime-50 p-4 shadow-sm">
+        <p className="text-xs font-semibold uppercase tracking-[0.2em] text-emerald-700">
+          Tipo de Cambio BCN
+        </p>
+        <p className="mt-2 text-lg font-bold text-gray-900">
+          1 USD = C$ {exchangeRate.toFixed(4)}
+        </p>
+        <p className="mt-1 text-xs text-gray-600">
+          Referencia oficial BCN
+        </p>
+      </div>
+
       <nav className="space-y-2">
-        {navItems.map((item) => (
+        {visibleNavItems.map((item) => (
           <NavLink key={item.to} to={item.to} end={Boolean((item as { end?: boolean }).end)} className={navLinkClass} onClick={onNavigate}>
             <item.icon className="h-4 w-4" />
             <span>{item.label}</span>
@@ -59,9 +98,6 @@ const SidebarContent = ({ onNavigate }: { onNavigate?: () => void }) => {
       </nav>
 
       <div className="mt-auto border-t border-gray-200 pt-4">
-        <p className="mb-3 truncate text-xs text-gray-500">
-          {user?.full_name || user?.username || user?.email}
-        </p>
         <Button
           variant="outline"
           className="w-full border-gray-300 text-gray-700 hover:bg-gray-50"
@@ -76,6 +112,16 @@ const SidebarContent = ({ onNavigate }: { onNavigate?: () => void }) => {
 };
 
 const AppLayout = ({ title, subtitle, children }: AppLayoutProps) => {
+  const navigate = useNavigate();
+
+  const handleBack = () => {
+    if (window.history.length > 1) {
+      navigate(-1);
+      return;
+    }
+    navigate("/dashboard");
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-blue-50">
       <div className="mx-auto flex min-h-screen max-w-[1400px] gap-6 p-4 md:p-6">
@@ -103,6 +149,15 @@ const AppLayout = ({ title, subtitle, children }: AppLayoutProps) => {
                     <SidebarContent />
                   </SheetContent>
                 </Sheet>
+
+                <Button
+                  variant="outline"
+                  className="border-gray-300 text-gray-700 hover:bg-gray-50"
+                  onClick={handleBack}
+                >
+                  <ArrowLeft className="mr-2 h-4 w-4" />
+                  Atrás
+                </Button>
 
                 <Button
                   asChild

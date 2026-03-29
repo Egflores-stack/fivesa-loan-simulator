@@ -7,6 +7,7 @@ export interface PostgresUser {
   last_name?: string;
   full_name?: string;
   role: string;
+  is_super_admin?: boolean;
   created_at?: string;
 }
 

@@ -120,6 +120,35 @@ export const getLoans = async (status = null) => {
   }
 };
 
+export const getLoanDetails = async (loanId) => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/loans/${loanId}`, {
+      headers: getAuthHeaders()
+    });
+    return await handleResponse(response);
+  } catch (error) {
+    console.error('Error obteniendo detalle del prestamo:', error);
+    throw error;
+  }
+};
+
+export const registerInstallmentPayment = async (loanId, installmentNumber, paymentData) => {
+  try {
+    const response = await fetch(
+      `${API_BASE_URL}/loans/${loanId}/installments/${installmentNumber}/pay`,
+      {
+        method: 'PUT',
+        headers: getAuthHeaders(),
+        body: JSON.stringify(paymentData)
+      }
+    );
+    return await handleResponse(response);
+  } catch (error) {
+    console.error('Error registrando pago de cuota:', error);
+    throw error;
+  }
+};
+
 // Crear nuevo cliente
 export const createClient = async (clientData) => {
   try {

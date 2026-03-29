@@ -43,6 +43,19 @@ const currency = new Intl.NumberFormat("es-NI", {
   maximumFractionDigits: 2,
 });
 
+const escapeHtml = (value: string) =>
+  value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
+
+const escapeCsvValue = (value: string) =>
+  value.includes(",") || value.includes("\n") || value.includes('"')
+    ? `"${value.replaceAll('"', '""')}"`
+    : value;
+
 const oneMonthFromNow = () => {
   const d = new Date();
   d.setMonth(d.getMonth() + 1);
@@ -113,6 +126,117 @@ const Simulator = () => {
   };
 
   const firstInstallment = simulation?.amortization?.[0];
+  const amortizationRows = simulation?.amortization || [];
+
+  const downloadAmortizationCsv = () => {
+    if (amortizationRows.length === 0) return;
+
+    const header = [
+      "Cuota",
+      "Fecha",
+      "Capital",
+      "Interes",
+      "Seguro Vida",
+      "Seguro Danos",
+      "Cuota Total",
+      "Saldo",
+      "Estado",
+    ];
+
+    const rows = amortizationRows.map((row) =>
+      [
+        String(row.numeroCuota),
+        new Date(row.fechaVencimiento).toLocaleDateString("es-NI"),
+        currency.format(row.capital),
+        currency.format(row.interes),
+        currency.format(row.seguroVida),
+        currency.format(row.seguroDanos),
+        currency.format(row.cuotaTotal),
+        currency.format(row.saldoCapital),
+        "Pendiente",
+      ]
+        .map(escapeCsvValue)
+        .join(","),
+    );
+
+    const csv = [header.join(","), ...rows].join("\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "tabla-amortizacion-proyectada.csv";
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+  };
+
+  const printAmortization = () => {
+    if (amortizationRows.length === 0) return;
+
+    const rowsHtml = amortizationRows
+      .map(
+        (row) => `
+          <tr>
+            <td>${row.numeroCuota}</td>
+            <td>${escapeHtml(new Date(row.fechaVencimiento).toLocaleDateString("es-NI"))}</td>
+            <td>${escapeHtml(currency.format(row.capital))}</td>
+            <td>${escapeHtml(currency.format(row.interes))}</td>
+            <td>${escapeHtml(currency.format(row.seguroVida))}</td>
+            <td>${escapeHtml(currency.format(row.seguroDanos))}</td>
+            <td>${escapeHtml(currency.format(row.cuotaTotal))}</td>
+            <td>${escapeHtml(currency.format(row.saldoCapital))}</td>
+            <td>Pendiente</td>
+          </tr>`,
+      )
+      .join("");
+
+    const html = `
+      <!DOCTYPE html>
+      <html lang="es">
+        <head>
+          <meta charset="UTF-8" />
+          <title>Tabla de amortizacion proyectada</title>
+          <style>
+            body { font-family: Arial, sans-serif; margin: 24px; color: #111827; }
+            h1 { margin-bottom: 6px; font-size: 22px; }
+            p { margin: 0 0 16px; color: #4b5563; }
+            table { width: 100%; border-collapse: collapse; font-size: 12px; }
+            th, td { border: 1px solid #d1d5db; padding: 8px; text-align: left; }
+            th { background: #f3f4f6; }
+            .right { text-align: right; }
+          </style>
+        </head>
+        <body>
+          <h1>Tabla de amortizacion proyectada</h1>
+          <p>Simulacion de credito Credia</p>
+          <table>
+            <thead>
+              <tr>
+                <th>Cuota</th>
+                <th>Fecha</th>
+                <th>Capital</th>
+                <th>Interes</th>
+                <th>Seg. Vida</th>
+                <th>Seg. Danos</th>
+                <th>Cuota Total</th>
+                <th>Saldo</th>
+                <th>Estado</th>
+              </tr>
+            </thead>
+            <tbody>${rowsHtml}</tbody>
+          </table>
+        </body>
+      </html>
+    `;
+
+    const printWindow = window.open("", "_blank", "width=1100,height=800");
+    if (!printWindow) return;
+    printWindow.document.write(html);
+    printWindow.document.close();
+    printWindow.focus();
+    printWindow.print();
+  };
 
   return (
     <AppLayout
@@ -246,7 +370,29 @@ const Simulator = () => {
 
           <Card className="border-gray-200 shadow-xl">
             <CardHeader>
-              <CardTitle>Plan de amortizacion proyectada</CardTitle>
+              <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                <CardTitle>Plan de amortizacion proyectada</CardTitle>
+                <div className="flex gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="border-gray-300"
+                    onClick={printAmortization}
+                    disabled={amortizationRows.length === 0}
+                  >
+                    Imprimir
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="border-gray-300"
+                    onClick={downloadAmortizationCsv}
+                    disabled={amortizationRows.length === 0}
+                  >
+                    Descargar
+                  </Button>
+                </div>
+              </div>
             </CardHeader>
             <CardContent>
               <div className="rounded-md border border-gray-200">
@@ -261,10 +407,11 @@ const Simulator = () => {
                       <TableHead className="text-right">Seg. Danos</TableHead>
                       <TableHead className="text-right">Cuota Total</TableHead>
                       <TableHead className="text-right">Saldo</TableHead>
+                      <TableHead>Estado</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {(simulation?.amortization || []).map((r) => (
+                    {amortizationRows.map((r) => (
                       <TableRow key={r.numeroCuota}>
                         <TableCell>{r.numeroCuota}</TableCell>
                         <TableCell>{new Date(r.fechaVencimiento).toLocaleDateString("es-NI")}</TableCell>
@@ -274,6 +421,11 @@ const Simulator = () => {
                         <TableCell className="text-right">{currency.format(r.seguroDanos)}</TableCell>
                         <TableCell className="text-right font-semibold">{currency.format(r.cuotaTotal)}</TableCell>
                         <TableCell className="text-right">{currency.format(r.saldoCapital)}</TableCell>
+                        <TableCell>
+                          <span className="rounded-full bg-yellow-100 px-2 py-1 text-xs font-medium text-yellow-800">
+                            Pendiente
+                          </span>
+                        </TableCell>
                       </TableRow>
                     ))}
                   </TableBody>

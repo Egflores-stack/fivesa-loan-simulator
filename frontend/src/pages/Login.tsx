@@ -26,7 +26,7 @@ const Login = () => {
       await login(username, password);
       navigate('/dashboard');
     } catch (err) {
-      setError('Credenciales invalidas');
+      setError(err instanceof Error ? err.message : 'No se pudo iniciar sesion');
     } finally {
       setLoading(false);
     }
@@ -178,7 +178,11 @@ const Login = () => {
                     type="button"
                     variant="link"
                     className="px-0 text-cyan-600 hover:text-cyan-800 text-sm font-medium"
-                    onClick={() => alert('Contacte al administrador del sistema para restablecer su contrasena')}
+                    onClick={() =>
+                      alert(
+                        'Si olvidaste tu contrasena, un administrador puede restablecerla en Configuracion > Usuarios. Si eres el unico admin, la clave debe cambiarse directo en PostgreSQL.',
+                      )
+                    }
                   >
                     ¿Contrasena olvidada?
                   </Button>

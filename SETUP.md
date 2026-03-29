@@ -55,6 +55,11 @@ NODE_ENV=development
 JWT_SECRET=credia_jwt_secret_key_2024_super_segura
 JWT_EXPIRES_IN=24h
 
+# Demo global
+DEMO_MODE_ENABLED=false
+DEMO_MODE_EXPIRES_AT=2026-12-31T23:59:59-06:00
+SUPER_ADMIN_USERNAME=emathews
+
 # CORS
 FRONTEND_URL=http://localhost:5173
 ```
@@ -67,6 +72,7 @@ cd ../frontend
 Crea un archivo `.env`:
 ```env
 VITE_API_URL=http://localhost:3000/api
+VITE_BCN_OFFICIAL_RATE=36.6243
 ```
 
 ### 5. Instalar Dependencias
@@ -200,6 +206,16 @@ Asegúrate que `FRONTEND_URL` en el backend .env coincida con la URL del fronten
 
 ### Error de Autenticación
 Limpia el localStorage del navegador y vuelve a intentar el login.
+
+### Control de Acceso para Demo
+Si quieres que toda la demo venza automáticamente en una fecha exacta, activa estas variables en `backend/.env`:
+
+```env
+DEMO_MODE_ENABLED=true
+DEMO_MODE_EXPIRES_AT=2026-03-31T23:59:59-06:00
+```
+
+Cuando llegue esa fecha y hora exacta, ningún usuario podrá iniciar sesión ni seguir usando el sistema con un token ya abierto.
 
 ## 📱 Características Técnicas
 

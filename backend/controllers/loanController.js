@@ -1,3 +1,4 @@
+import { canAuthorizeLoans } from '../auth.js';
 import { pool, query } from '../db.js';
 
 const round2 = (value) => Number(Number(value).toFixed(2));
@@ -738,6 +739,10 @@ export const createLoan = async (req, res) => {
 export const approveLoan = async (req, res) => {
   const dbClient = await pool.connect();
   try {
+    if (!canAuthorizeLoans(req.userRole)) {
+      return res.status(403).json({ success: false, message: 'No tienes permisos para aprobar creditos' });
+    }
+
     const creditId = parseInt(req.params.id, 10);
     const userId = req.userId;
     if (!Number.isInteger(creditId) || creditId <= 0) {
@@ -925,6 +930,10 @@ export const approveLoan = async (req, res) => {
 
 export const rejectLoan = async (req, res) => {
   try {
+    if (!canAuthorizeLoans(req.userRole)) {
+      return res.status(403).json({ success: false, message: 'No tienes permisos para rechazar creditos' });
+    }
+
     const creditId = parseInt(req.params.id, 10);
     const rejectionReason = req.body.rejectionReason ?? req.body.observaciones ?? 'Solicitud rechazada';
 
@@ -966,13 +975,24 @@ export const getAllLoans = async (req, res) => {
     const page = Math.max(1, parseInt(req.query.page, 10) || 1);
     const limit = Math.min(100, Math.max(1, parseInt(req.query.limit, 10) || 20));
     const offset = (page - 1) * limit;
+    const onlyOwnLoans = !canAuthorizeLoans(req.userRole);
+    const creditColumns = await getTableColumns(pool, 'op', 'creditos');
+    const creditQuotaColumn = pickExistingColumn(creditColumns, ['cuota_referencial', 'monthly_payment']);
+    const cuotaReferencialSelect = creditQuotaColumn
+      ? `COALESCE(first_row.cuota_total, cr.${creditQuotaColumn}) AS cuota_referencial`
+      : `COALESCE(first_row.cuota_total, 0) AS cuota_referencial`;
 
-    let whereClause = '';
+    const whereConditions = [];
     const params = [];
     if (status) {
       params.push(status);
-      whereClause = `WHERE cr.estado = $${params.length}`;
+      whereConditions.push(`cr.estado = $${params.length}`);
     }
+    if (onlyOwnLoans) {
+      params.push(req.userId);
+      whereConditions.push(`cr.asesor_id = $${params.length}`);
+    }
+    const whereClause = whereConditions.length > 0 ? `WHERE ${whereConditions.join(' AND ')}` : '';
 
     params.push(limit);
     params.push(offset);
@@ -992,7 +1012,7 @@ export const getAllLoans = async (req, res) => {
               cr.fecha_aprobacion,
               cr.destino,
               (ua.nombres || ' ' || ua.apellidos) AS asesor_nombre,
-              first_row.cuota_total AS cuota_referencial
+              ${cuotaReferencialSelect}
        FROM op.creditos cr
        JOIN cl.clientes cl ON cl.id = cr.cliente_id
        LEFT JOIN us.usuarios ua ON ua.id = cr.asesor_id
@@ -1010,11 +1030,20 @@ export const getAllLoans = async (req, res) => {
       params,
     );
 
-    const countParams = status ? [status] : [];
+    const countParams = [];
+    const countWhereConditions = [];
+    if (status) {
+      countParams.push(status);
+      countWhereConditions.push(`cr.estado = $${countParams.length}`);
+    }
+    if (onlyOwnLoans) {
+      countParams.push(req.userId);
+      countWhereConditions.push(`cr.asesor_id = $${countParams.length}`);
+    }
     const countResult = await query(
       `SELECT COUNT(*)::int AS total
        FROM op.creditos cr
-       ${status ? 'WHERE cr.estado = $1' : ''}`,
+       ${countWhereConditions.length > 0 ? `WHERE ${countWhereConditions.join(' AND ')}` : ''}`,
       countParams,
     );
 
@@ -1122,5 +1151,133 @@ export const getLoanDetails = async (req, res) => {
       message: 'Error obteniendo detalle del credito',
       error: error.message,
     });
+  }
+};
+
+export const registerInstallmentPayment = async (req, res) => {
+  const dbClient = await pool.connect();
+  try {
+    if (!canAuthorizeLoans(req.userRole)) {
+      return res.status(403).json({ success: false, message: 'No tienes permisos para registrar pagos' });
+    }
+
+    const creditId = parseInt(req.params.id, 10);
+    const installmentNumber = parseInt(req.params.installmentNumber, 10);
+    const paidAmountInput = req.body.paidAmount;
+    const paymentDateInput = req.body.paymentDate;
+
+    if (!Number.isInteger(creditId) || creditId <= 0 || !Number.isInteger(installmentNumber) || installmentNumber <= 0) {
+      return res.status(400).json({ success: false, message: 'Identificadores invalidos para registrar pago' });
+    }
+
+    await dbClient.query('BEGIN');
+
+    const amortizationColumns = await getTableColumns(dbClient, 'op', 'amortizaciones');
+    const amortizationColumnMap = {
+      creditoId: pickExistingColumn(amortizationColumns, ['credito_id', 'loan_id']),
+      numeroCuota: pickExistingColumn(amortizationColumns, ['numero_cuota', 'payment_number']),
+      cuotaTotal: pickExistingColumn(amortizationColumns, ['cuota_total', 'total_amount']),
+      estado: pickExistingColumn(amortizationColumns, ['estado', 'status']),
+      fechaPago: pickExistingColumn(amortizationColumns, ['fecha_pago', 'paid_date']),
+      montoPagado: pickExistingColumn(amortizationColumns, ['monto_pagado', 'paid_amount']),
+    };
+
+    const requiredColumns = [
+      amortizationColumnMap.creditoId,
+      amortizationColumnMap.numeroCuota,
+      amortizationColumnMap.cuotaTotal,
+      amortizationColumnMap.estado,
+    ];
+    if (requiredColumns.some((column) => !column)) {
+      throw new Error('La tabla op.amortizaciones no tiene columnas minimas para registrar pago');
+    }
+
+    const installmentResult = await dbClient.query(
+      `SELECT ${amortizationColumnMap.numeroCuota} AS numero_cuota,
+              ${amortizationColumnMap.cuotaTotal} AS cuota_total,
+              ${amortizationColumnMap.estado} AS estado
+              ${amortizationColumnMap.fechaPago ? `, ${amortizationColumnMap.fechaPago} AS fecha_pago` : ', NULL AS fecha_pago'}
+              ${amortizationColumnMap.montoPagado ? `, ${amortizationColumnMap.montoPagado} AS monto_pagado` : ', NULL AS monto_pagado'}
+       FROM op.amortizaciones
+       WHERE ${amortizationColumnMap.creditoId} = $1
+         AND ${amortizationColumnMap.numeroCuota} = $2
+       FOR UPDATE`,
+      [creditId, installmentNumber],
+    );
+
+    if (installmentResult.rowCount === 0) {
+      await dbClient.query('ROLLBACK');
+      return res.status(404).json({ success: false, message: 'Cuota no encontrada' });
+    }
+
+    const installment = installmentResult.rows[0];
+    const currentStatus = normalizeStatus(installment.estado);
+    if (currentStatus === 'PAGADO' || currentStatus === 'PAID' || currentStatus === 'CANCELADA' || currentStatus === 'CANCELADO') {
+      await dbClient.query('ROLLBACK');
+      return res.status(400).json({ success: false, message: 'La cuota ya fue registrada como pagada' });
+    }
+
+    const cuotaTotal = parseNumber(installment.cuota_total, 0);
+    const paidAmount = paidAmountInput === undefined || paidAmountInput === null || paidAmountInput === ''
+      ? cuotaTotal
+      : parseNumber(paidAmountInput, NaN);
+
+    if (!Number.isFinite(paidAmount) || paidAmount <= 0) {
+      await dbClient.query('ROLLBACK');
+      return res.status(400).json({ success: false, message: 'El monto pagado debe ser mayor que cero' });
+    }
+
+    const updateParts = [`${amortizationColumnMap.estado} = 'PAGADO'`];
+    const updateValues = [];
+
+    if (amortizationColumnMap.fechaPago) {
+      if (paymentDateInput) {
+        updateValues.push(paymentDateInput);
+        updateParts.push(`${amortizationColumnMap.fechaPago} = $${updateValues.length}`);
+      } else {
+        updateParts.push(`${amortizationColumnMap.fechaPago} = NOW()`);
+      }
+    }
+
+    if (amortizationColumnMap.montoPagado) {
+      updateValues.push(round2(paidAmount));
+      updateParts.push(`${amortizationColumnMap.montoPagado} = $${updateValues.length}`);
+    }
+
+    updateValues.push(creditId);
+    updateValues.push(installmentNumber);
+
+    const result = await dbClient.query(
+      `UPDATE op.amortizaciones
+       SET ${updateParts.join(', ')}
+       WHERE ${amortizationColumnMap.creditoId} = $${updateValues.length - 1}
+         AND ${amortizationColumnMap.numeroCuota} = $${updateValues.length}
+       RETURNING ${amortizationColumnMap.numeroCuota} AS numero_cuota,
+                 ${amortizationColumnMap.cuotaTotal} AS cuota_total,
+                 ${amortizationColumnMap.estado} AS estado
+                 ${amortizationColumnMap.fechaPago ? `, ${amortizationColumnMap.fechaPago} AS fecha_pago` : ', NULL AS fecha_pago'}
+                 ${amortizationColumnMap.montoPagado ? `, ${amortizationColumnMap.montoPagado} AS monto_pagado` : ', NULL AS monto_pagado'}`,
+      updateValues,
+    );
+
+    await dbClient.query('COMMIT');
+
+    res.json({
+      success: true,
+      message: 'Pago registrado correctamente',
+      installment: result.rows[0],
+    });
+  } catch (error) {
+    try {
+      await dbClient.query('ROLLBACK');
+    } catch {}
+    console.error('Error registrando pago de cuota:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error registrando el pago de la cuota',
+      error: error.message,
+    });
+  } finally {
+    dbClient.release();
   }
 };

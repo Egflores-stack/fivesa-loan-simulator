@@ -13,6 +13,7 @@ import Simulator from "./pages/Simulator";
 import Requests from "./pages/Requests";
 import Config from "./pages/Config";
 import Clients from "./pages/Clients";
+import Reports from "./pages/Reports";
 import { AuthProvider } from "@/hooks/useAuth";
 import ProtectedRoute from "./components/ProtectedRoute";
 
@@ -97,12 +98,30 @@ const App = () => {
                   </ProtectedRoute>
                 }
               />
+
+              <Route
+                path="/authorizations"
+                element={
+                  <ProtectedRoute>
+                    <Requests />
+                  </ProtectedRoute>
+                }
+              />
               
               <Route
                 path="/config"
                 element={
                   <ProtectedRoute>
                     <Config />
+                  </ProtectedRoute>
+                }
+              />
+
+              <Route
+                path="/reports"
+                element={
+                  <ProtectedRoute>
+                    <Reports />
                   </ProtectedRoute>
                 }
               />

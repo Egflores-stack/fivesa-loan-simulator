@@ -2,7 +2,15 @@ import express from 'express';
 import dotenv from 'dotenv';
 import cors from 'cors';
 import { testConnection } from './db.js';
-import { register, login, getProfile, verifyToken } from './auth.js';
+import { changePassword, getProfile, login, register, verifyToken } from './auth.js';
+import {
+    createUser,
+    deleteUser,
+    fetchParameters,
+    fetchUsers,
+    updateParameters,
+    updateUser,
+} from './controllers/configController.js';
 
 // Importar nuevos controladores
 import { 
@@ -19,7 +27,8 @@ import {
     approveLoan, 
     rejectLoan,
     getAllLoans, 
-    getLoanDetails 
+    getLoanDetails,
+    registerInstallmentPayment,
 } from './controllers/loanController.js';
 
 import { getDashboardStats } from './controllers/dashboardController.js';
@@ -59,9 +68,19 @@ app.put('/api/loans/:id/approve', verifyToken, approveLoan);
 app.put('/api/loans/:id/reject', verifyToken, rejectLoan);
 app.get('/api/loans', verifyToken, getAllLoans);
 app.get('/api/loans/:id', verifyToken, getLoanDetails);
+app.put('/api/loans/:id/installments/:installmentNumber/pay', verifyToken, registerInstallmentPayment);
 
 // Perfil de usuario
 app.get('/api/auth/profile', verifyToken, getProfile);
+app.post('/api/auth/change-password', verifyToken, changePassword);
+
+// Configuracion
+app.get('/api/config/users', verifyToken, fetchUsers);
+app.post('/api/config/users', verifyToken, createUser);
+app.patch('/api/config/users/:id', verifyToken, updateUser);
+app.delete('/api/config/users/:id', verifyToken, deleteUser);
+app.get('/api/config/parameters', verifyToken, fetchParameters);
+app.put('/api/config/parameters', verifyToken, updateParameters);
 
 // ===== RUTA DE PRUEBA =====
 app.get('/', (req, res) => {

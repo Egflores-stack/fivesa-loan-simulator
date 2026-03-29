@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
 import AppLayout from "@/components/AppLayout";
+import { useAuth } from "@/hooks/useAuth";
 import { toast } from "@/hooks/use-toast";
 import {
   ApiRequestError,
@@ -65,9 +66,12 @@ const nextStep = (s: Step): Step => (s === 1 ? 2 : s === 2 ? 3 : 4);
 const prevStep = (s: Step): Step => (s === 4 ? 3 : s === 3 ? 2 : 1);
 
 const Requests = () => {
+  const { user } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
   const isFormMode = location.pathname === "/requests/new";
+  const isAuthorizationMode = location.pathname === "/authorizations";
+  const canAuthorize = user?.role === "Administrador" || user?.role === "Supervisor";
   const [rows, setRows] = useState<LoanRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState("");
@@ -114,6 +118,10 @@ const Requests = () => {
     };
     loadClientOptions();
   }, [isFormMode]);
+
+  useEffect(() => {
+    setStatusFilter(isAuthorizationMode ? "PENDIENTE" : "TODOS");
+  }, [isAuthorizationMode]);
 
   const loadLoans = useCallback(async () => {
     try { setLoading(true); const status = statusFilter === "TODOS" ? undefined : statusFilter; const r = await getLoans(status); setRows(r.loans || []); }
@@ -282,11 +290,33 @@ const Requests = () => {
     );
   }
 
+  if (isAuthorizationMode && !canAuthorize) {
+    return (
+      <AppLayout title="Autorizaciones" subtitle="Acceso segun rol">
+        <Card className="border-gray-200 shadow-xl">
+          <CardHeader>
+            <CardTitle>Acceso restringido</CardTitle>
+            <CardDescription>
+              Solo los usuarios con rol Administrador o Supervisor pueden aprobar o rechazar solicitudes.
+            </CardDescription>
+          </CardHeader>
+        </Card>
+      </AppLayout>
+    );
+  }
+
   return (
-    <AppLayout title="Bandeja de Solicitudes" subtitle="Gestion, aprobacion y rechazo de creditos">
+    <AppLayout
+      title={isAuthorizationMode ? "Autorizaciones" : "Bandeja de Solicitudes"}
+      subtitle={
+        isAuthorizationMode
+          ? "Revision y aprobacion de creditos segun rol"
+          : "Consulta y seguimiento de solicitudes registradas"
+      }
+    >
       <div className="space-y-6">
         <Card className="border-gray-200 shadow-xl"><CardContent className="p-4"><div className="flex flex-col gap-3 md:flex-row"><Input placeholder="Buscar por codigo, cliente, email o tipo" value={search} onChange={(e) => setSearch(e.target.value)} /><Select value={statusFilter} onValueChange={setStatusFilter}><SelectTrigger className="w-full md:w-56"><SelectValue /></SelectTrigger><SelectContent>{statusOptions.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}</SelectContent></Select><Button variant="outline" className="border-gray-300" onClick={loadLoans} disabled={loading}>{loading ? "Actualizando..." : "Actualizar"}</Button></div></CardContent></Card>
-        <Card className="border-gray-200 shadow-xl"><CardHeader><CardTitle>Solicitudes ({filteredRows.length})</CardTitle></CardHeader><CardContent><div className="rounded-md border"><Table><TableHeader><TableRow><TableHead>Codigo</TableHead><TableHead>Cliente</TableHead><TableHead>Tipo</TableHead><TableHead className="text-right">Monto</TableHead><TableHead className="text-right">Tasa</TableHead><TableHead className="text-right">Plazo</TableHead><TableHead className="text-right">Cuota Mensual</TableHead><TableHead>Estado</TableHead><TableHead>Fecha</TableHead><TableHead className="text-right">Acciones</TableHead></TableRow></TableHeader><TableBody>{filteredRows.map((l) => <TableRow key={l.id}><TableCell className="font-medium">{l.codigo}</TableCell><TableCell><div className="text-sm"><p className="font-medium">{l.cliente_nombre}</p><p className="text-muted-foreground">{l.cliente_email || "-"}</p></div></TableCell><TableCell>{l.tipo_credito}</TableCell><TableCell className="text-right">{currency.format(l.monto_solicitado)}</TableCell><TableCell className="text-right">{l.tasa_interes.toFixed(2)}%</TableCell><TableCell className="text-right">{l.plazo_meses}</TableCell><TableCell className="text-right">{currency.format(l.cuota_referencial ?? 0)}</TableCell><TableCell><span className={`rounded-full px-2 py-1 text-xs font-medium ${l.estado === "APROBADO" ? "bg-green-100 text-green-800" : l.estado === "RECHAZADO" ? "bg-red-100 text-red-800" : "bg-yellow-100 text-yellow-800"}`}>{l.estado}</span></TableCell><TableCell>{new Date(l.fecha_solicitud).toLocaleDateString("es-NI")}</TableCell><TableCell className="text-right"><div className="flex justify-end gap-2"><Button size="sm" variant="outline" onClick={() => { setSelectedLoan(l); setShowDetailsDialog(true); }}>Ver</Button>{l.estado === "PENDIENTE" && <><Button size="sm" className="bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-700 hover:to-blue-700" onClick={() => { setSelectedLoan(l); setShowApprovalDialog(true); }}>Aprobar</Button><Button size="sm" variant="destructive" onClick={() => { setSelectedLoan(l); setShowRejectionDialog(true); }}>Rechazar</Button></>}</div></TableCell></TableRow>)}{!loading && filteredRows.length === 0 && <TableRow><TableCell colSpan={10} className="text-center text-muted-foreground">No hay resultados para los filtros actuales.</TableCell></TableRow>}</TableBody></Table></div></CardContent></Card>
+        <Card className="border-gray-200 shadow-xl"><CardHeader><CardTitle>{isAuthorizationMode ? `Solicitudes por autorizar (${filteredRows.length})` : `Solicitudes (${filteredRows.length})`}</CardTitle></CardHeader><CardContent><div className="rounded-md border"><Table><TableHeader><TableRow><TableHead>Codigo</TableHead><TableHead>Cliente</TableHead><TableHead>Tipo</TableHead><TableHead className="text-right">Monto</TableHead><TableHead className="text-right">Tasa</TableHead><TableHead className="text-right">Plazo</TableHead><TableHead className="text-right">Cuota Mensual</TableHead><TableHead>Estado</TableHead><TableHead>Fecha</TableHead><TableHead className="text-right">Acciones</TableHead></TableRow></TableHeader><TableBody>{filteredRows.map((l) => <TableRow key={l.id}><TableCell className="font-medium">{l.codigo}</TableCell><TableCell><div className="text-sm"><p className="font-medium">{l.cliente_nombre}</p><p className="text-muted-foreground">{l.cliente_email || "-"}</p></div></TableCell><TableCell>{l.tipo_credito}</TableCell><TableCell className="text-right">{currency.format(l.monto_solicitado)}</TableCell><TableCell className="text-right">{l.tasa_interes.toFixed(2)}%</TableCell><TableCell className="text-right">{l.plazo_meses}</TableCell><TableCell className="text-right">{currency.format(l.cuota_referencial ?? 0)}</TableCell><TableCell><span className={`rounded-full px-2 py-1 text-xs font-medium ${l.estado === "APROBADO" ? "bg-green-100 text-green-800" : l.estado === "RECHAZADO" ? "bg-red-100 text-red-800" : "bg-yellow-100 text-yellow-800"}`}>{l.estado}</span></TableCell><TableCell>{new Date(l.fecha_solicitud).toLocaleDateString("es-NI")}</TableCell><TableCell className="text-right"><div className="flex justify-end gap-2"><Button size="sm" variant="outline" onClick={() => { setSelectedLoan(l); setShowDetailsDialog(true); }}>Ver</Button>{isAuthorizationMode && canAuthorize && l.estado === "PENDIENTE" && <><Button size="sm" className="bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-700 hover:to-blue-700" onClick={() => { setSelectedLoan(l); setShowApprovalDialog(true); }}>Aprobar</Button><Button size="sm" variant="destructive" onClick={() => { setSelectedLoan(l); setShowRejectionDialog(true); }}>Rechazar</Button></>}</div></TableCell></TableRow>)}{!loading && filteredRows.length === 0 && <TableRow><TableCell colSpan={10} className="text-center text-muted-foreground">{isAuthorizationMode ? "No hay solicitudes pendientes por autorizar." : "No hay resultados para los filtros actuales."}</TableCell></TableRow>}</TableBody></Table></div></CardContent></Card>
       </div>
 
       <Dialog open={showDetailsDialog} onOpenChange={setShowDetailsDialog}><DialogContent><DialogHeader><DialogTitle>Detalle de solicitud</DialogTitle></DialogHeader>{selectedLoan && <div className="grid gap-3 text-sm"><div><Label>Codigo</Label><p>{selectedLoan.codigo}</p></div><div><Label>Cliente</Label><p>{selectedLoan.cliente_nombre}</p></div><div><Label>Email</Label><p>{selectedLoan.cliente_email || "-"}</p></div><div><Label>Monto</Label><p>{currency.format(selectedLoan.monto_solicitado)}</p></div><div><Label>Cuota mensual</Label><p>{currency.format(selectedLoan.cuota_referencial ?? 0)}</p></div><div><Label>Estado</Label><p>{selectedLoan.estado}</p></div></div>}</DialogContent></Dialog>
