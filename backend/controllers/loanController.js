@@ -296,9 +296,44 @@ const safeParseJson = (value, fallback = {}) => {
   }
 };
 
+const buildRejectedObservations = (currentValue, rejectionReason) => {
+  const trimmedReason = String(rejectionReason || 'Solicitud rechazada').trim();
+  const timestamp = new Date().toISOString();
+  const parsed = safeParseJson(currentValue, null);
+
+  if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+    const previousHistory = Array.isArray(parsed.rejectionHistory) ? parsed.rejectionHistory : [];
+    return JSON.stringify({
+      ...parsed,
+      rejectionReason: trimmedReason,
+      rejectedAt: timestamp,
+      rejectionHistory: [
+        ...previousHistory,
+        {
+          reason: trimmedReason,
+          createdAt: timestamp,
+        },
+      ],
+    });
+  }
+
+  const baseText = String(currentValue || '').trim();
+  return baseText
+    ? `${baseText}\nRECHAZO: ${trimmedReason}`
+    : `RECHAZO: ${trimmedReason}`;
+};
+
 const parseInteger = (value) => {
   const parsed = parseInt(value, 10);
   return Number.isInteger(parsed) ? parsed : null;
+};
+
+const isPaidInstallmentStatus = (status) => {
+  const currentStatus = normalizeStatus(status);
+  return currentStatus === 'PAGADO'
+    || currentStatus === 'PAID'
+    || currentStatus === 'CANCELADA'
+    || currentStatus === 'CANCELADO';
 };
 
 const resolveOrCreateClientId = async (dbClient, userId, body = {}) => {
@@ -929,6 +964,7 @@ export const approveLoan = async (req, res) => {
 };
 
 export const rejectLoan = async (req, res) => {
+  const dbClient = await pool.connect();
   try {
     if (!canAuthorizeLoans(req.userRole)) {
       return res.status(403).json({ success: false, message: 'No tienes permisos para rechazar creditos' });
@@ -936,23 +972,71 @@ export const rejectLoan = async (req, res) => {
 
     const creditId = parseInt(req.params.id, 10);
     const rejectionReason = req.body.rejectionReason ?? req.body.observaciones ?? 'Solicitud rechazada';
+    if (!Number.isInteger(creditId) || creditId <= 0) {
+      return res.status(400).json({ success: false, message: 'ID de credito invalido' });
+    }
 
-    const result = await query(
-      `UPDATE op.creditos
-       SET estado = 'RECHAZADO',
-           observaciones = COALESCE(observaciones, '') || E'\nRECHAZO: ' || $1
-       WHERE id = $2
-         AND estado = 'PENDIENTE'
-       RETURNING id, codigo, cliente_id, estado`,
-      [rejectionReason, creditId],
+    await dbClient.query('BEGIN');
+
+    const creditColumns = await getTableColumns(dbClient, 'op', 'creditos');
+    const creditColumnMap = {
+      id: pickExistingColumn(creditColumns, ['id']),
+      codigo: pickExistingColumn(creditColumns, ['codigo', 'numero_credito']),
+      clienteId: pickExistingColumn(creditColumns, ['cliente_id', 'client_id']),
+      estado: pickExistingColumn(creditColumns, ['estado', 'status']),
+      observaciones: pickExistingColumn(creditColumns, ['observaciones', 'notes']),
+    };
+    const requiredCreditColumns = [
+      creditColumnMap.id,
+      creditColumnMap.estado,
+    ];
+    if (requiredCreditColumns.some((column) => !column)) {
+      throw new Error('La tabla op.creditos no tiene columnas minimas para rechazar');
+    }
+
+    const selectedCreditResult = await dbClient.query(
+      `SELECT ${creditColumnMap.id} AS id,
+              ${creditColumnMap.estado} AS estado,
+              ${creditColumnMap.codigo ? `${creditColumnMap.codigo} AS codigo,` : `NULL AS codigo,`}
+              ${creditColumnMap.clienteId ? `${creditColumnMap.clienteId} AS cliente_id,` : `NULL AS cliente_id,`}
+              ${creditColumnMap.observaciones ? `${creditColumnMap.observaciones} AS observaciones` : `NULL AS observaciones`}
+       FROM op.creditos
+       WHERE ${creditColumnMap.id} = $1
+         AND ${creditColumnMap.estado} = 'PENDIENTE'
+       FOR UPDATE`,
+      [creditId],
     );
 
-    if (result.rowCount === 0) {
+    if (selectedCreditResult.rowCount === 0) {
+      await dbClient.query('ROLLBACK');
       return res.status(404).json({
         success: false,
         message: 'Credito no encontrado o no esta pendiente',
       });
     }
+
+    const selectedCredit = selectedCreditResult.rows[0];
+    const updateParts = [`${creditColumnMap.estado} = 'RECHAZADO'`];
+    const updateValues = [];
+
+    if (creditColumnMap.observaciones) {
+      updateValues.push(buildRejectedObservations(selectedCredit.observaciones, rejectionReason));
+      updateParts.push(`${creditColumnMap.observaciones} = $${updateValues.length}`);
+    }
+
+    updateValues.push(creditId);
+    const result = await dbClient.query(
+      `UPDATE op.creditos
+       SET ${updateParts.join(', ')}
+       WHERE ${creditColumnMap.id} = $${updateValues.length}
+       RETURNING ${creditColumnMap.id} AS id,
+                 ${creditColumnMap.codigo ? `${creditColumnMap.codigo} AS codigo,` : `'N/A' AS codigo,`}
+                 ${creditColumnMap.clienteId ? `${creditColumnMap.clienteId} AS cliente_id,` : `NULL AS cliente_id,`}
+                 ${creditColumnMap.estado} AS estado`,
+      updateValues,
+    );
+
+    await dbClient.query('COMMIT');
 
     res.json({
       success: true,
@@ -960,12 +1044,17 @@ export const rejectLoan = async (req, res) => {
       loan: result.rows[0],
     });
   } catch (error) {
+    try {
+      await dbClient.query('ROLLBACK');
+    } catch {}
     console.error('Error rechazando credito:', error);
     res.status(500).json({
       success: false,
       message: 'Error rechazando credito',
       error: error.message,
     });
+  } finally {
+    dbClient.release();
   }
 };
 
@@ -1100,6 +1189,9 @@ export const getAllLoans = async (req, res) => {
 export const getLoanDetails = async (req, res) => {
   try {
     const creditId = parseInt(req.params.id, 10);
+    const onlyOwnLoans = !canAuthorizeLoans(req.userRole);
+    const params = [creditId];
+    const ownershipFilter = onlyOwnLoans ? ` AND cr.asesor_id = $${params.push(req.userId)}` : '';
 
     const loanResult = await query(
       `SELECT cr.*,
@@ -1112,8 +1204,8 @@ export const getLoanDetails = async (req, res) => {
        JOIN cl.clientes cl ON cl.id = cr.cliente_id
        LEFT JOIN us.usuarios ua ON ua.id = cr.asesor_id
        LEFT JOIN us.usuarios up ON up.id = cr.aprobado_por
-       WHERE cr.id = $1`,
-      [creditId],
+       WHERE cr.id = $1${ownershipFilter}`,
+      params,
     );
 
     if (loanResult.rowCount === 0) {
@@ -1211,8 +1303,7 @@ export const registerInstallmentPayment = async (req, res) => {
     }
 
     const installment = installmentResult.rows[0];
-    const currentStatus = normalizeStatus(installment.estado);
-    if (currentStatus === 'PAGADO' || currentStatus === 'PAID' || currentStatus === 'CANCELADA' || currentStatus === 'CANCELADO') {
+    if (isPaidInstallmentStatus(installment.estado)) {
       await dbClient.query('ROLLBACK');
       return res.status(400).json({ success: false, message: 'La cuota ya fue registrada como pagada' });
     }
@@ -1225,6 +1316,14 @@ export const registerInstallmentPayment = async (req, res) => {
     if (!Number.isFinite(paidAmount) || paidAmount <= 0) {
       await dbClient.query('ROLLBACK');
       return res.status(400).json({ success: false, message: 'El monto pagado debe ser mayor que cero' });
+    }
+
+    if (round2(paidAmount) < round2(cuotaTotal)) {
+      await dbClient.query('ROLLBACK');
+      return res.status(400).json({
+        success: false,
+        message: 'El monto pagado no puede ser menor a la cuota total mientras el sistema solo maneje cuotas canceladas completas',
+      });
     }
 
     const updateParts = [`${amortizationColumnMap.estado} = 'PAGADO'`];

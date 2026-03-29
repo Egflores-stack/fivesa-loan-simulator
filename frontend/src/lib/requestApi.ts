@@ -25,6 +25,32 @@ type RequestPayload = Omit<
   status?: string;
 };
 
+type RequestApiShape = {
+  id: string;
+  type: LoanRequest["type"];
+  currency: LoanRequest["currency"];
+  amount: number | string;
+  term_months?: number | string;
+  termMonths?: number | string;
+  monthly_rate?: number | string;
+  monthlyRate?: number | string;
+  payment_frequency?: LoanRequest["paymentFrequency"];
+  paymentFrequency?: LoanRequest["paymentFrequency"];
+  commission_type?: LoanRequest["commissionType"];
+  commissionType?: LoanRequest["commissionType"];
+  commission_value?: number | string;
+  commissionValue?: number | string;
+  previous_balance?: number | null;
+  previousBalance?: number | null;
+  responsible: string;
+  manager: string;
+  payment_dates?: string | null;
+  paymentDates?: string | null;
+  status: string;
+  request_date?: string;
+  requestDate?: string;
+};
+
 const API_BASE_URL =
   import.meta.env.VITE_API_BASE_URL || "http://localhost:3001";
 
@@ -33,7 +59,7 @@ const buildHeaders = (token: string) => ({
   Authorization: `Bearer ${token}`,
 });
 
-const normalizeRequest = (payload: any): LoanRequest => ({
+const normalizeRequest = (payload: RequestApiShape): LoanRequest => ({
   id: payload.id,
   type: payload.type,
   currency: payload.currency,
@@ -60,7 +86,7 @@ export const fetchLoanRequests = async (token: string) => {
     throw new Error("No se pudieron cargar las solicitudes.");
   }
 
-  const data = (await response.json()) as { requests: any[] };
+  const data = (await response.json()) as { requests: RequestApiShape[] };
   return data.requests.map(normalizeRequest);
 };
 
@@ -76,7 +102,7 @@ export const createLoanRequest = async (token: string, payload: RequestPayload) 
     throw new Error(errorBody.message || "No se pudo guardar la solicitud.");
   }
 
-  const data = (await response.json()) as { request: any };
+  const data = (await response.json()) as { request: RequestApiShape };
   return normalizeRequest(data.request);
 };
 
@@ -96,7 +122,7 @@ export const updateLoanRequest = async (
     throw new Error(errorBody.message || "No se pudo actualizar la solicitud.");
   }
 
-  const data = (await response.json()) as { request: any };
+  const data = (await response.json()) as { request: RequestApiShape };
   return normalizeRequest(data.request);
 };
 

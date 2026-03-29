@@ -12,6 +12,8 @@ import {
   Pie,
   Cell,
 } from "recharts";
+import type { TooltipProps } from "recharts";
+import type { NameType, ValueType } from "recharts/types/component/DefaultTooltipContent";
 
 interface LoanChartProps {
   data: AmortizationRow[];
@@ -19,6 +21,12 @@ interface LoanChartProps {
   totalInterest: number;
   currency: "NIO" | "USD";
 }
+
+type ChartTooltipEntry = {
+  color?: string;
+  name?: NameType;
+  value?: ValueType;
+};
 
 const LoanChart = ({ data, totalPrincipal, totalInterest, currency }: LoanChartProps) => {
   if (data.length === 0) return null;
@@ -35,20 +43,25 @@ const LoanChart = ({ data, totalPrincipal, totalInterest, currency }: LoanChartP
     { name: "Intereses", value: totalInterest, color: "hsl(25, 90%, 56%)" },
   ];
 
-  const CustomTooltip = ({ active, payload, label }: any) => {
+  const CustomTooltip = ({ active, payload, label }: TooltipProps<ValueType, NameType>) => {
     if (active && payload && payload.length) {
       return (
         <div className="rounded-lg border border-border bg-card p-3 shadow-lg">
           <p className="mb-2 font-semibold text-foreground">Cuota {label}</p>
-          {payload.map((entry: any, index: number) => (
+          {payload.map((entry, index: number) => {
+            const tooltipEntry = entry as ChartTooltipEntry;
+            const value = typeof tooltipEntry.value === "number" ? tooltipEntry.value : Number(tooltipEntry.value ?? 0);
+
+            return (
             <p
               key={index}
               className="text-sm"
-              style={{ color: entry.color }}
+              style={{ color: tooltipEntry.color }}
             >
-              {entry.name}: {formatCurrency(entry.value, currency)}
+              {tooltipEntry.name}: {formatCurrency(value, currency)}
             </p>
-          ))}
+            );
+          })}
         </div>
       );
     }

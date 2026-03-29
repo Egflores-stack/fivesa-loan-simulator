@@ -280,7 +280,7 @@ const Simulator = () => {
             </div>
 
             <div className="space-y-2">
-              <Label>Tasa mensual (%)</Label>
+              <Label>Tasa por periodo (%)</Label>
               <Input type="number" value={annualRate} onChange={(e) => setAnnualRate(Number(e.target.value) || 0)} />
             </div>
 

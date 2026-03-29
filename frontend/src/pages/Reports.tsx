@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import AppLayout from "@/components/AppLayout";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -112,16 +112,7 @@ const Reports = () => {
     loadApprovedLoans();
   }, []);
 
-  useEffect(() => {
-    if (!selectedLoanId) {
-      setStatement(null);
-      return;
-    }
-
-    loadStatement();
-  }, [selectedLoanId]);
-
-  const loadStatement = async () => {
+  const loadStatement = useCallback(async () => {
     if (!selectedLoanId) return;
 
     try {
@@ -138,7 +129,16 @@ const Reports = () => {
     } finally {
       setLoadingStatement(false);
     }
-  };
+  }, [selectedLoanId]);
+
+  useEffect(() => {
+    if (!selectedLoanId) {
+      setStatement(null);
+      return;
+    }
+
+    loadStatement();
+  }, [loadStatement, selectedLoanId]);
 
   const openPaymentDialog = (installment: LoanDetailRow) => {
     setSelectedInstallment(installment);
