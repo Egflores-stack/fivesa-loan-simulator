@@ -12,16 +12,19 @@ const normalizeStatus = (value) => String(value || '').trim().toUpperCase();
 
 export const getDashboardStats = async (req, res) => {
   try {
+    const cod_empresa = req.cod_empresa;
+
     const [totalsResult, monthlyResult, recentResult] = await Promise.all([
       query(
         `SELECT
            (SELECT COUNT(DISTINCT c.cliente_id)::int
             FROM op.creditos c
-            WHERE UPPER(TRIM(c.estado)) = 'APROBADO') AS total_clients,
-           (SELECT COUNT(*)::int FROM op.creditos) AS total_loans,
-           (SELECT COUNT(*)::int FROM op.creditos WHERE estado = 'PENDIENTE') AS pending_loans,
-           (SELECT COUNT(*)::int FROM op.creditos WHERE estado = 'APROBADO') AS approved_loans,
-           (SELECT COALESCE(SUM(monto_solicitado), 0) FROM op.creditos WHERE estado = 'APROBADO') AS total_approved_amount`
+            WHERE UPPER(TRIM(c.estado)) = 'APROBADO' AND c.cod_empresa = $1) AS total_clients,
+           (SELECT COUNT(*)::int FROM op.creditos WHERE cod_empresa = $1) AS total_loans,
+           (SELECT COUNT(*)::int FROM op.creditos WHERE estado = 'PENDIENTE' AND cod_empresa = $1) AS pending_loans,
+           (SELECT COUNT(*)::int FROM op.creditos WHERE estado = 'APROBADO' AND cod_empresa = $1) AS approved_loans,
+           (SELECT COALESCE(SUM(monto_solicitado), 0) FROM op.creditos WHERE estado = 'APROBADO' AND cod_empresa = $1) AS total_approved_amount`,
+        [cod_empresa]
       ),
       query(
         `SELECT
@@ -30,9 +33,10 @@ export const getDashboardStats = async (req, res) => {
            COUNT(*) FILTER (WHERE estado = 'RECHAZADO')::int AS rechazados,
            COUNT(*) FILTER (WHERE estado = 'PENDIENTE')::int AS pendientes
          FROM op.creditos
-         WHERE fecha_solicitud >= NOW() - INTERVAL '6 months'
+         WHERE fecha_solicitud >= NOW() - INTERVAL '6 months' AND cod_empresa = $1
          GROUP BY DATE_TRUNC('month', fecha_solicitud)
-         ORDER BY DATE_TRUNC('month', fecha_solicitud)`
+         ORDER BY DATE_TRUNC('month', fecha_solicitud)`,
+        [cod_empresa]
       ),
       query(
         `SELECT c.id,
@@ -43,8 +47,10 @@ export const getDashboardStats = async (req, res) => {
                 (cl.nombres || ' ' || cl.apellidos) AS cliente
          FROM op.creditos c
          JOIN cl.clientes cl ON cl.id = c.cliente_id
+         WHERE c.cod_empresa = $1
          ORDER BY c.fecha_solicitud DESC
-         LIMIT 8`
+         LIMIT 8`,
+        [cod_empresa]
       ),
     ]);
 

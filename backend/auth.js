@@ -110,6 +110,7 @@ const buildUserResponse = (user = {}) => {
         last_name: lastName,
         role: normalizeRoleForClient(user.role),
         full_name: fullName,
+        cod_empresa: user.cod_empresa || 'MAIN',
         is_super_admin: isSuperAdminIdentity(user.username, user.email),
         is_active: user.is_active,
         created_at: user.created_at,
@@ -119,7 +120,7 @@ const buildUserResponse = (user = {}) => {
 // Registrar usuario
 export const register = async (req, res) => {
     try {
-        const { username, email, password, first_name, last_name, role = 'asesor' } = req.body;
+        const { username, email, password, first_name, last_name, role = 'asesor', cod_empresa = 'MAIN' } = req.body;
         const authSource = await resolveAuthSource();
         const storageRole = normalizeRoleForStorage(role, authSource);
 
@@ -145,16 +146,16 @@ export const register = async (req, res) => {
         // Insertar usuario
         const result = authSource === 'us.usuarios'
             ? await query(
-                `INSERT INTO us.usuarios (usuario, email, password_hash, rol, nombres, apellidos, activo, creado_en, actualizado_en)
-                 VALUES ($1, $2, $3, $4, $5, $6, true, NOW(), NOW())
-                 RETURNING id, usuario AS username, email, nombres AS first_name, apellidos AS last_name, rol AS role, activo AS is_active, creado_en AS created_at`,
-                [normalizedUsername, email, hashedPassword, storageRole, first_name || '', last_name || '']
+                `INSERT INTO us.usuarios (usuario, email, password_hash, rol, nombres, apellidos, activo, cod_empresa, creado_en, actualizado_en)
+                 VALUES ($1, $2, $3, $4, $5, $6, true, $7, NOW(), NOW())
+                 RETURNING id, usuario AS username, email, nombres AS first_name, apellidos AS last_name, rol AS role, activo AS is_active, cod_empresa, creado_en AS created_at`,
+                [normalizedUsername, email, hashedPassword, storageRole, first_name || '', last_name || '', cod_empresa]
             )
             : await query(
-                `INSERT INTO users (email, password_hash, first_name, last_name, role, created_at)
-                 VALUES ($1, $2, $3, $4, $5, NOW())
-                 RETURNING id, split_part(email, '@', 1) AS username, email, first_name, last_name, role, is_active, created_at`,
-                [email, hashedPassword, first_name || '', last_name || '', storageRole]
+                `INSERT INTO users (email, password_hash, first_name, last_name, role, cod_empresa, created_at)
+                 VALUES ($1, $2, $3, $4, $5, $6, NOW())
+                 RETURNING id, split_part(email, '@', 1) AS username, email, first_name, last_name, role, is_active, cod_empresa, created_at`,
+                [email, hashedPassword, first_name || '', last_name || '', storageRole, cod_empresa]
             );
         
         const newUser = buildUserResponse(result.rows[0]);
@@ -185,7 +186,7 @@ export const login = async (req, res) => {
         // Buscar usuario por username con compatibilidad por email
         const result = authSource === 'us.usuarios'
             ? await query(
-                `SELECT id, usuario AS username, email, password_hash, rol AS role, nombres AS first_name, apellidos AS last_name, activo AS is_active
+                `SELECT id, usuario AS username, email, password_hash, rol AS role, nombres AS first_name, apellidos AS last_name, activo AS is_active, cod_empresa
                  FROM us.usuarios
                  WHERE activo = true
                    AND (LOWER(usuario) = $1 OR LOWER(email) = $1)
@@ -193,7 +194,7 @@ export const login = async (req, res) => {
                 [identifier]
             )
             : await query(
-                `SELECT id, split_part(email, '@', 1) AS username, email, password_hash, role, first_name, last_name, is_active
+                `SELECT id, split_part(email, '@', 1) AS username, email, password_hash, role, first_name, last_name, is_active, cod_empresa
                  FROM users
                  WHERE is_active = true
                    AND (
@@ -224,6 +225,7 @@ export const login = async (req, res) => {
                 email: normalizedUser.email,
                 username: normalizedUser.username,
                 role: normalizedUser.role,
+                cod_empresa: normalizedUser.cod_empresa,
             },
             process.env.JWT_SECRET || 'credia_jwt_secret_key_2024_super_segura',
             { expiresIn: process.env.JWT_EXPIRES_IN || '24h' }
@@ -249,13 +251,13 @@ export const getProfile = async (req, res) => {
         const authSource = await resolveAuthSource();
         const result = authSource === 'us.usuarios'
             ? await query(
-                `SELECT id, usuario AS username, email, nombres AS first_name, apellidos AS last_name, rol AS role, activo AS is_active, creado_en AS created_at
+                `SELECT id, usuario AS username, email, nombres AS first_name, apellidos AS last_name, rol AS role, activo AS is_active, cod_empresa, creado_en AS created_at
                  FROM us.usuarios
                  WHERE id = $1`,
                 [req.userId]
             )
             : await query(
-                "SELECT id, email, split_part(email, '@', 1) AS username, first_name, last_name, role, is_active, created_at FROM users WHERE id = $1",
+                "SELECT id, email, split_part(email, '@', 1) AS username, first_name, last_name, role, is_active, cod_empresa, created_at FROM users WHERE id = $1",
                 [req.userId]
             );
         
@@ -360,6 +362,7 @@ export const verifyToken = async (req, res, next) => {
         req.userEmail = decoded.email;
         req.userUsername = decoded.username || decoded.email?.split('@')[0];
         req.userRole = normalizeRoleForClient(decoded.role);
+        req.cod_empresa = decoded.cod_empresa || 'MAIN';
         next();
     } catch (error) {
         if (error?.code === 'DEMO_ACCESS_EXPIRED') {

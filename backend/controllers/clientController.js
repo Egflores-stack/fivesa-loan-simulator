@@ -53,17 +53,18 @@ export const registerClient = async (req, res) => {
     const encodedEstadoCivil = JSON.stringify({
       fivesa_profile: fivesaProfile,
     });
+    const cod_empresa = req.cod_empresa;
 
     const existingIdentification = await query(
-      'SELECT id FROM cl.clientes WHERE identificacion = $1',
-      [identificacion],
+      'SELECT id FROM cl.clientes WHERE identificacion = $1 AND cod_empresa = $2',
+      [identificacion, cod_empresa],
     );
 
     if (existingIdentification.rowCount > 0) {
       return res.status(400).json({
         success: false,
         code: 'DUPLICATE_IDENTIFICACION',
-        message: 'Ya existe un cliente con esta identificacion',
+        message: 'Ya existe un cliente con esta identificacion en su empresa',
         fieldErrors: {
           identificacion: 'La cedula ya existe',
         },
@@ -72,15 +73,15 @@ export const registerClient = async (req, res) => {
 
     if (email) {
       const existingEmail = await query(
-        'SELECT id FROM cl.clientes WHERE email = $1',
-        [email],
+        'SELECT id FROM cl.clientes WHERE email = $1 AND cod_empresa = $2',
+        [email, cod_empresa],
       );
 
       if (existingEmail.rowCount > 0) {
         return res.status(400).json({
           success: false,
           code: 'DUPLICATE_EMAIL',
-          message: 'Ya existe un cliente con este email',
+          message: 'Ya existe un cliente con este email en su empresa',
           fieldErrors: {
             email: 'El correo ya existe',
           },
@@ -91,10 +92,10 @@ export const registerClient = async (req, res) => {
     const result = await query(
       `INSERT INTO cl.clientes
        (identificacion, tipo_identificacion, nombres, apellidos, fecha_nacimiento, genero, telefono, email, direccion,
-        ocupacion, ingreso_mensual, estado_civil, asesor_id)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+        ocupacion, ingreso_mensual, estado_civil, asesor_id, cod_empresa)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
        RETURNING id, identificacion, tipo_identificacion, nombres, apellidos, fecha_nacimiento, genero, telefono,
-                 email, direccion, ocupacion, ingreso_mensual, estado_civil, activo, creado_en, asesor_id`,
+                 email, direccion, ocupacion, ingreso_mensual, estado_civil, activo, creado_en, asesor_id, cod_empresa`,
       [
         identificacion,
         req.body.tipo_identificacion ?? 'DNI',
@@ -109,6 +110,7 @@ export const registerClient = async (req, res) => {
         req.body.ingreso_mensual ?? req.body.monthly_income ?? null,
         encodedEstadoCivil,
         userId,
+        cod_empresa
       ],
     );
 
@@ -158,16 +160,16 @@ export const checkClientExists = async (req, res) => {
 
     if (identificacion) {
       const result = await query(
-        'SELECT id FROM cl.clientes WHERE identificacion = $1 LIMIT 1',
-        [identificacion],
+        'SELECT id FROM cl.clientes WHERE identificacion = $1 AND cod_empresa = $2 LIMIT 1',
+        [identificacion, req.cod_empresa],
       );
       byIdentification = result.rows[0] ?? null;
     }
 
     if (email) {
       const result = await query(
-        'SELECT id FROM cl.clientes WHERE email = $1 LIMIT 1',
-        [email],
+        'SELECT id FROM cl.clientes WHERE email = $1 AND cod_empresa = $2 LIMIT 1',
+        [email, req.cod_empresa],
       );
       byEmail = result.rows[0] ?? null;
     }
@@ -196,8 +198,8 @@ export const getAllClients = async (req, res) => {
     const limit = Math.min(100, Math.max(1, parseInt(req.query.limit, 10) || 20));
     const offset = (page - 1) * limit;
 
-    let whereClause = 'WHERE 1=1';
-    const params = [];
+    let whereClause = 'WHERE c.cod_empresa = $1';
+    const params = [req.cod_empresa];
 
     if (search) {
       params.push(`%${search}%`);
@@ -221,12 +223,15 @@ export const getAllClients = async (req, res) => {
       params,
     );
 
-    const countParams = search ? [`%${search}%`] : [];
+    const countParams = [req.cod_empresa];
+    if (search) countParams.push(`%${search}%`);
+
     const countResult = await query(
       `SELECT COUNT(*)::int AS total
        FROM cl.clientes c
+       WHERE c.cod_empresa = $1
        ${search
-         ? `WHERE c.nombres ILIKE $1 OR c.apellidos ILIKE $1 OR c.email ILIKE $1 OR c.identificacion ILIKE $1`
+         ? ` AND (c.nombres ILIKE $2 OR c.apellidos ILIKE $2 OR c.email ILIKE $2 OR c.identificacion ILIKE $2)`
          : ''}`,
       countParams,
     );
@@ -259,14 +264,14 @@ export const getClientById = async (req, res) => {
               (u.nombres || ' ' || u.apellidos) AS asesor_nombre
        FROM cl.clientes c
        LEFT JOIN us.usuarios u ON u.id = c.asesor_id
-       WHERE c.id = $1`,
-      [clientId],
+       WHERE c.id = $1 AND c.cod_empresa = $2`,
+      [clientId, req.cod_empresa],
     );
 
     if (result.rowCount === 0) {
       return res.status(404).json({
         success: false,
-        message: 'Cliente no encontrado',
+        message: 'Cliente no encontrado o no pertenece a su empresa',
       });
     }
 
@@ -274,9 +279,9 @@ export const getClientById = async (req, res) => {
       `SELECT id, codigo, monto_solicitado, tasa_interes, plazo_meses,
               tipo_credito, estado, fecha_solicitud, fecha_aprobacion
        FROM op.creditos
-       WHERE cliente_id = $1
+       WHERE cliente_id = $1 AND cod_empresa = $2
        ORDER BY fecha_solicitud DESC`,
-      [clientId],
+      [clientId, req.cod_empresa],
     );
 
     res.json({
@@ -344,13 +349,14 @@ export const updateClient = async (req, res) => {
     }
 
     values.push(clientId);
+    values.push(req.cod_empresa);
 
     const result = await query(
       `UPDATE cl.clientes
        SET ${setClause.join(', ')}
-       WHERE id = $${values.length}
+       WHERE id = $${values.length - 1} AND cod_empresa = $${values.length}
        RETURNING id, identificacion, tipo_identificacion, nombres, apellidos, fecha_nacimiento, genero, telefono,
-                 email, direccion, ocupacion, ingreso_mensual, estado_civil, activo, creado_en, asesor_id`,
+                 email, direccion, ocupacion, ingreso_mensual, estado_civil, activo, creado_en, asesor_id, cod_empresa`,
       values,
     );
 
