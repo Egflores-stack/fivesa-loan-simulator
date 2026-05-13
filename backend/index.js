@@ -33,6 +33,14 @@ import {
 
 import { getDashboardStats } from './controllers/dashboardController.js';
 
+import {
+    uploadDocumentMetadata,
+    getClientDocuments,
+    deleteDocument
+} from './controllers/documentController.js';
+
+import { getRiskMetrics } from './controllers/riskController.js';
+
 dotenv.config();
 
 const app = express();
@@ -53,6 +61,7 @@ app.post('/api/auth/login', login);
 
 // Dashboard
 app.get('/api/dashboard/stats', verifyToken, getDashboardStats);
+app.get('/api/dashboard/risk', verifyToken, getRiskMetrics);
 
 // Clientes
 app.post('/api/clients', verifyToken, registerClient);
@@ -60,6 +69,9 @@ app.get('/api/clients', verifyToken, getAllClients);
 app.get('/api/clients/exists', verifyToken, checkClientExists);
 app.get('/api/clients/:id', verifyToken, getClientById);
 app.put('/api/clients/:id', verifyToken, updateClient);
+app.get('/api/clients/:cliente_id/documents', verifyToken, getClientDocuments);
+app.post('/api/documents', verifyToken, uploadDocumentMetadata);
+app.delete('/api/documents/:id', verifyToken, deleteDocument);
 
 // Préstamos
 app.post('/api/loans/calculate', verifyToken, calculateLoan);

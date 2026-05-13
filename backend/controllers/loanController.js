@@ -120,11 +120,13 @@ const parseParameterValue = (rawValue, fallback = 0) => {
   return Number.isFinite(parsed) ? parsed : fallback;
 };
 
-const getFinancialParameters = async () => {
+const getFinancialParameters = async (cod_empresa = 'MAIN') => {
   const codes = [
     ...PARAMETER_CODES.lifeInsurance,
     ...PARAMETER_CODES.damageInsurance,
     ...PARAMETER_CODES.commission,
+    'MORA_TASA_DIARIA_PCT',
+    'MORA_CARGO_FIJO'
   ];
   let result;
   try {
@@ -132,8 +134,9 @@ const getFinancialParameters = async () => {
       `SELECT codigo, valor
        FROM pa.parametros
        WHERE activo = true
+         AND (cod_empresa = $2 OR cod_empresa IS NULL)
          AND codigo = ANY($1::text[])`,
-      [codes],
+      [codes, cod_empresa],
     );
   } catch (error) {
     return {
@@ -158,10 +161,12 @@ const getFinancialParameters = async () => {
     seguroVidaPct: pick(PARAMETER_CODES.lifeInsurance, 0),
     seguroDanosPct: pick(PARAMETER_CODES.damageInsurance, 0),
     comisionPct: pick(PARAMETER_CODES.commission, 0),
+    moraTasaDiariaPct: pick(['MORA_TASA_DIARIA_PCT'], 0.1),
+    moraCargoFijo: pick(['MORA_CARGO_FIJO'], 50.00),
   };
 };
 
-const buildFrenchAmortization = ({
+export const buildFrenchAmortization = ({
   principal,
   annualRatePct,
   termMonths,
@@ -169,6 +174,9 @@ const buildFrenchAmortization = ({
   firstDueDate,
   seguroVidaPct,
   seguroDanosPct,
+  gracePeriodMonths = 0,
+  gracePeriodType = 'INTEREST_ONLY', // 'INTEREST_ONLY' or 'FULL'
+  extraordinaryInstallments = [], // Array of { installmentNumber, amount }
 }) => {
   const frequencyConfig = getFrequencyConfig(frequency);
   const totalInstallments = Math.max(1, Math.round(termMonths * frequencyConfig.installmentsPerMonth));
@@ -179,23 +187,43 @@ const buildFrenchAmortization = ({
   const rows = [];
   let balance = principal;
 
+  const graceInstallments = Math.round(gracePeriodMonths * frequencyConfig.installmentsPerMonth);
+  const remainingInstallments = totalInstallments - graceInstallments;
+
   let baseInstallment = 0;
-  if (totalInstallments > 0) {
+  if (remainingInstallments > 0) {
     if (periodicRate === 0) {
-      baseInstallment = principal / totalInstallments;
+      baseInstallment = principal / remainingInstallments;
     } else {
-      const factor = Math.pow(1 + periodicRate, totalInstallments);
+      const factor = Math.pow(1 + periodicRate, remainingInstallments);
       baseInstallment = (principal * periodicRate * factor) / (factor - 1);
     }
   }
 
   for (let installment = 1; installment <= totalInstallments; installment += 1) {
+    const isGrace = installment <= graceInstallments;
     let interest = balance * periodicRate;
-    let capital = baseInstallment - interest;
+    let capital = 0;
 
-    if (installment === totalInstallments) {
-      capital = balance;
-      interest = baseInstallment - capital;
+    if (isGrace) {
+      if (gracePeriodType === 'INTEREST_ONLY') {
+        capital = 0;
+      } else if (gracePeriodType === 'FULL') {
+        capital = 0;
+        interest = 0; // In FULL grace, interest is usually deferred or forgiven for that period
+      }
+    } else {
+      capital = baseInstallment - interest;
+      if (installment === totalInstallments) {
+        capital = balance;
+        interest = baseInstallment - capital;
+      }
+    }
+
+    // Add extraordinary payment if any
+    const extra = extraordinaryInstallments.find(e => e.installmentNumber === installment);
+    if (extra) {
+      capital += extra.amount;
     }
 
     const lifeInsurance = balance * periodicSeguroVidaRate;
@@ -213,6 +241,7 @@ const buildFrenchAmortization = ({
       seguroDanos: round2(damageInsurance),
       cuotaTotal: round2(payment),
       saldoCapital: round2(balance),
+      isGracePeriod: isGrace
     });
   }
 
@@ -458,6 +487,7 @@ const resolveOrCreateClientId = async (dbClient, userId, body = {}) => {
 
 export const calculateLoan = async (req, res) => {
   try {
+    const cod_empresa = req.cod_empresa || 'MAIN';
     const principal = parseNumber(req.body.amount ?? req.body.monto_solicitado, 0);
     const termMonths = parseInt(req.body.termMonths ?? req.body.plazo_meses, 10);
     const annualRatePct = parseNumber(req.body.annualRate ?? req.body.tasa_interes, 0);
@@ -473,7 +503,7 @@ export const calculateLoan = async (req, res) => {
       });
     }
 
-    const parameters = await getFinancialParameters();
+    const parameters = await getFinancialParameters(cod_empresa);
 
     const seguroVidaPct = parseNumber(req.body.seguroVidaPct, parameters.seguroVidaPct);
     const seguroDanosPct = parseNumber(req.body.seguroDanosPct, parameters.seguroDanosPct);
@@ -487,6 +517,9 @@ export const calculateLoan = async (req, res) => {
       firstDueDate,
       seguroVidaPct,
       seguroDanosPct,
+      gracePeriodMonths: parseNumber(req.body.gracePeriodMonths, 0),
+      gracePeriodType: req.body.gracePeriodType || 'INTEREST_ONLY',
+      extraordinaryInstallments: req.body.extraordinaryInstallments || [],
     });
 
     const totalComision = round2(principal * (comisionPct / 100));
@@ -564,7 +597,7 @@ export const createLoan = async (req, res) => {
       });
     }
 
-    const parameters = await getFinancialParameters();
+    const parameters = await getFinancialParameters(req.cod_empresa);
     const seguroVidaPct = parseNumber(req.body.seguroVidaPct, parameters.seguroVidaPct);
     const seguroDanosPct = parseNumber(req.body.seguroDanosPct, parameters.seguroDanosPct);
     const comisionPct = parseNumber(req.body.comisionPct, parameters.comisionPct);
@@ -577,6 +610,9 @@ export const createLoan = async (req, res) => {
       firstDueDate,
       seguroVidaPct,
       seguroDanosPct,
+      gracePeriodMonths: parseNumber(req.body.gracePeriodMonths, 0),
+      gracePeriodType: req.body.gracePeriodType || 'INTEREST_ONLY',
+      extraordinaryInstallments: req.body.extraordinaryInstallments || [],
     });
 
     const totalComision = round2(montoSolicitado * (comisionPct / 100));
@@ -640,6 +676,7 @@ export const createLoan = async (req, res) => {
       [creditColumnMap.tasaInteres]: tasaInteres,
       [creditColumnMap.plazoMeses]: plazoMeses,
       [creditColumnMap.tipoCredito]: toDbLoanType(tipoCredito, creditColumnMap.tipoCredito),
+      cod_empresa: req.cod_empresa,
     };
 
     if (creditColumnMap.codigo) creditPayload[creditColumnMap.codigo] = codigo;
@@ -851,7 +888,7 @@ export const approveLoan = async (req, res) => {
     const parsedCalculo = parsedObservaciones.calculo ?? {};
     const frecuencia = normalizeFrequency(credit.frecuencia_pago ?? parsedCalculo.frecuencia ?? 'MENSUAL');
 
-    const parameters = await getFinancialParameters();
+    const parameters = await getFinancialParameters(req.cod_empresa);
     const seguroVidaPct = parseNumber(credit.seguro_vida_pct ?? parsedCalculo.seguroVidaPct, parameters.seguroVidaPct);
     const seguroDanosPct = parseNumber(credit.seguro_danos_pct ?? parsedCalculo.seguroDanosPct, parameters.seguroDanosPct);
     const comisionPct = parseNumber(credit.comision_pct ?? parsedCalculo.comisionPct, parameters.comisionPct);
@@ -865,6 +902,9 @@ export const approveLoan = async (req, res) => {
       firstDueDate,
       seguroVidaPct,
       seguroDanosPct,
+      gracePeriodMonths: parseNumber(parsedCalculo.gracePeriodMonths, 0),
+      gracePeriodType: parsedCalculo.gracePeriodType || 'INTEREST_ONLY',
+      extraordinaryInstallments: parsedCalculo.extraordinaryInstallments || [],
     });
 
     const amortizationColumns = await getTableColumns(dbClient, 'op', 'amortizaciones');
@@ -904,6 +944,7 @@ export const approveLoan = async (req, res) => {
         [amortizationColumnMap.interes]: row.interes,
         [amortizationColumnMap.cuotaTotal]: row.cuotaTotal,
         [amortizationColumnMap.saldoCapital]: row.saldoCapital,
+        cod_empresa: req.cod_empresa,
       };
       if (amortizationColumnMap.estado) amortizationPayload[amortizationColumnMap.estado] = 'PENDIENTE';
       if (amortizationColumnMap.seguroVida) amortizationPayload[amortizationColumnMap.seguroVida] = row.seguroVida;
@@ -1065,14 +1106,15 @@ export const getAllLoans = async (req, res) => {
     const limit = Math.min(100, Math.max(1, parseInt(req.query.limit, 10) || 20));
     const offset = (page - 1) * limit;
     const onlyOwnLoans = !canAuthorizeLoans(req.userRole);
+    const cod_empresa = req.cod_empresa;
     const creditColumns = await getTableColumns(pool, 'op', 'creditos');
     const creditQuotaColumn = pickExistingColumn(creditColumns, ['cuota_referencial', 'monthly_payment']);
     const cuotaReferencialSelect = creditQuotaColumn
       ? `COALESCE(first_row.cuota_total, cr.${creditQuotaColumn}) AS cuota_referencial`
       : `COALESCE(first_row.cuota_total, 0) AS cuota_referencial`;
 
-    const whereConditions = [];
-    const params = [];
+    const whereConditions = [`cr.cod_empresa = $1`];
+    const params = [cod_empresa];
     if (status) {
       params.push(status);
       whereConditions.push(`cr.estado = $${params.length}`);
@@ -1119,8 +1161,8 @@ export const getAllLoans = async (req, res) => {
       params,
     );
 
-    const countParams = [];
-    const countWhereConditions = [];
+    const countParams = [cod_empresa];
+    const countWhereConditions = [`cr.cod_empresa = $1`];
     if (status) {
       countParams.push(status);
       countWhereConditions.push(`cr.estado = $${countParams.length}`);
@@ -1132,7 +1174,7 @@ export const getAllLoans = async (req, res) => {
     const countResult = await query(
       `SELECT COUNT(*)::int AS total
        FROM op.creditos cr
-       ${countWhereConditions.length > 0 ? `WHERE ${countWhereConditions.join(' AND ')}` : ''}`,
+       WHERE ${countWhereConditions.join(' AND ')}`,
       countParams,
     );
 
@@ -1190,7 +1232,7 @@ export const getLoanDetails = async (req, res) => {
   try {
     const creditId = parseInt(req.params.id, 10);
     const onlyOwnLoans = !canAuthorizeLoans(req.userRole);
-    const params = [creditId];
+    const params = [creditId, req.cod_empresa];
     const ownershipFilter = onlyOwnLoans ? ` AND cr.asesor_id = $${params.push(req.userId)}` : '';
 
     const loanResult = await query(
@@ -1204,7 +1246,7 @@ export const getLoanDetails = async (req, res) => {
        JOIN cl.clientes cl ON cl.id = cr.cliente_id
        LEFT JOIN us.usuarios ua ON ua.id = cr.asesor_id
        LEFT JOIN us.usuarios up ON up.id = cr.aprobado_por
-       WHERE cr.id = $1${ownershipFilter}`,
+       WHERE cr.id = $1 AND cr.cod_empresa = $2${ownershipFilter}`,
       params,
     );
 
@@ -1309,8 +1351,24 @@ export const registerInstallmentPayment = async (req, res) => {
     }
 
     const cuotaTotal = parseNumber(installment.cuota_total, 0);
+    const dueDate = new Date(installment.fecha_vencimiento);
+    const paymentDate = paymentDateInput ? new Date(paymentDateInput) : new Date();
+
+    let moraAmount = 0;
+    if (paymentDate > dueDate) {
+      const diffTime = Math.abs(paymentDate - dueDate);
+      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+      const params = await getFinancialParameters(req.cod_empresa);
+      const dailyMoraPct = parseNumber(params.moraTasaDiariaPct, 0.1); // Default 0.1% daily
+      const fixedMoraFee = parseNumber(params.moraCargoFijo, 50.00); // Default 50 fixed fee
+
+      moraAmount = round2((cuotaTotal * (dailyMoraPct / 100) * diffDays) + fixedMoraFee);
+    }
+
+    const totalToPayWithMora = round2(cuotaTotal + moraAmount);
     const paidAmount = paidAmountInput === undefined || paidAmountInput === null || paidAmountInput === ''
-      ? cuotaTotal
+      ? totalToPayWithMora
       : parseNumber(paidAmountInput, NaN);
 
     if (!Number.isFinite(paidAmount) || paidAmount <= 0) {
@@ -1318,11 +1376,12 @@ export const registerInstallmentPayment = async (req, res) => {
       return res.status(400).json({ success: false, message: 'El monto pagado debe ser mayor que cero' });
     }
 
-    if (round2(paidAmount) < round2(cuotaTotal)) {
+    if (round2(paidAmount) < totalToPayWithMora) {
       await dbClient.query('ROLLBACK');
       return res.status(400).json({
         success: false,
-        message: 'El monto pagado no puede ser menor a la cuota total mientras el sistema solo maneje cuotas canceladas completas',
+        message: `El monto pagado (${paidAmount}) no puede ser menor al total con mora (${totalToPayWithMora})`,
+        moraCalculada: moraAmount
       });
     }
 

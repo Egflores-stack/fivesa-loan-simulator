@@ -14,6 +14,7 @@ import Requests from "./pages/Requests";
 import Config from "./pages/Config";
 import Clients from "./pages/Clients";
 import Reports from "./pages/Reports";
+import RiskDashboard from "./pages/RiskDashboard";
 import { AuthProvider } from "@/hooks/useAuth";
 import ProtectedRoute from "./components/ProtectedRoute";
 
@@ -59,6 +60,15 @@ const App = () => {
                 element={
                   <ProtectedRoute>
                     <Dashboard />
+                  </ProtectedRoute>
+                }
+              />
+
+              <Route
+                path="/risk"
+                element={
+                  <ProtectedRoute>
+                    <RiskDashboard />
                   </ProtectedRoute>
                 }
               />
