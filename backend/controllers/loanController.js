@@ -270,6 +270,102 @@ export const buildFrenchAmortization = ({
   };
 };
 
+export const buildGermanAmortization = ({
+  principal,
+  annualRatePct,
+  termMonths,
+  frequency,
+  firstDueDate,
+  seguroVidaPct,
+  seguroDanosPct,
+  gracePeriodMonths = 0,
+  gracePeriodType = 'INTEREST_ONLY',
+  extraordinaryInstallments = [],
+}) => {
+  const frequencyConfig = getFrequencyConfig(frequency);
+  const totalInstallments = Math.max(1, Math.round(termMonths * frequencyConfig.installmentsPerMonth));
+  const monthlyRate = annualRatePct / 100;
+  const periodicRate = monthlyRate / frequencyConfig.rateDivisor;
+  const periodicSeguroVidaRate = (seguroVidaPct / 100) / frequencyConfig.rateDivisor;
+  const periodicSeguroDanosRate = (seguroDanosPct / 100) / frequencyConfig.rateDivisor;
+  const rows = [];
+  let balance = principal;
+
+  const graceInstallments = Math.round(gracePeriodMonths * frequencyConfig.installmentsPerMonth);
+  const remainingInstallments = totalInstallments - graceInstallments;
+
+  const constantCapital = remainingInstallments > 0 ? principal / remainingInstallments : 0;
+
+  for (let installment = 1; installment <= totalInstallments; installment += 1) {
+    const isGrace = installment <= graceInstallments;
+    let interest = balance * periodicRate;
+    let capital = 0;
+
+    if (isGrace) {
+      if (gracePeriodType === 'INTEREST_ONLY') {
+        capital = 0;
+      } else if (gracePeriodType === 'FULL') {
+        capital = 0;
+        interest = 0;
+      }
+    } else {
+      capital = constantCapital;
+    }
+
+    const extra = extraordinaryInstallments.find(e => e.installmentNumber === installment);
+    if (extra) {
+      capital += extra.amount;
+    }
+
+    // Ensure we don't overpay if balance is low or it's the last installment
+    if (capital > balance || installment === totalInstallments) {
+      capital = balance;
+    }
+
+    const lifeInsurance = balance * periodicSeguroVidaRate;
+    const damageInsurance = balance * periodicSeguroDanosRate;
+    const payment = capital + interest + lifeInsurance + damageInsurance;
+
+    balance = Math.max(0, balance - capital);
+
+    rows.push({
+      numeroCuota: installment,
+      fechaVencimiento: toDateOnly(frequencyConfig.addPeriod(firstDueDate, installment - 1)),
+      capital: round2(capital),
+      interes: round2(interest),
+      seguroVida: round2(lifeInsurance),
+      seguroDanos: round2(damageInsurance),
+      cuotaTotal: round2(payment),
+      saldoCapital: round2(balance),
+      isGracePeriod: isGrace
+    });
+  }
+
+  const totals = rows.reduce(
+    (acc, row) => {
+      acc.capital += row.capital;
+      acc.interes += row.interes;
+      acc.seguroVida += row.seguroVida;
+      acc.seguroDanos += row.seguroDanos;
+      acc.cuota += row.cuotaTotal;
+      return acc;
+    },
+    { capital: 0, interes: 0, seguroVida: 0, seguroDanos: 0, cuota: 0 },
+  );
+
+  return {
+    rows,
+    firstInstallmentAmount: rows[0]?.cuotaTotal ?? 0,
+    totals: {
+      totalCapital: round2(totals.capital),
+      totalInteres: round2(totals.interes),
+      totalSeguroVida: round2(totals.seguroVida),
+      totalSeguroDanos: round2(totals.seguroDanos),
+      totalCuotas: round2(totals.cuota),
+    },
+  };
+};
+
 const generateCreditCode = async (dbClient) => {
   const nextIdResult = await dbClient.query('SELECT COALESCE(MAX(id), 0) + 1 AS next_id FROM op.creditos');
   const nextId = nextIdResult.rows[0].next_id;
@@ -509,7 +605,10 @@ export const calculateLoan = async (req, res) => {
     const seguroDanosPct = parseNumber(req.body.seguroDanosPct, parameters.seguroDanosPct);
     const comisionPct = parseNumber(req.body.comisionPct, parameters.comisionPct);
 
-    const amortization = buildFrenchAmortization({
+    const method = req.body.method || 'FRENCH';
+    const amortizationFn = method.toUpperCase() === 'GERMAN' ? buildGermanAmortization : buildFrenchAmortization;
+
+    const amortization = amortizationFn({
       principal,
       annualRatePct,
       termMonths,
@@ -602,7 +701,10 @@ export const createLoan = async (req, res) => {
     const seguroDanosPct = parseNumber(req.body.seguroDanosPct, parameters.seguroDanosPct);
     const comisionPct = parseNumber(req.body.comisionPct, parameters.comisionPct);
 
-    const amortization = buildFrenchAmortization({
+    const method = req.body.method || 'FRENCH';
+    const amortizationFn = method.toUpperCase() === 'GERMAN' ? buildGermanAmortization : buildFrenchAmortization;
+
+    const amortization = amortizationFn({
       principal: montoSolicitado,
       annualRatePct: tasaInteres,
       termMonths: plazoMeses,
@@ -622,6 +724,7 @@ export const createLoan = async (req, res) => {
       comisionPct: round2(comisionPct),
       frecuencia,
       totalComision,
+      metodo_amortizacion: method.toUpperCase(),
     };
     const observaciones = JSON.stringify({
       nota: observacionesEntrada,
@@ -808,6 +911,68 @@ export const createLoan = async (req, res) => {
   }
 };
 
+export const requestLoanDisbursement = async (req, res) => {
+  const dbClient = await pool.connect();
+  try {
+    const creditId = parseInt(req.params.id, 10);
+    const cod_empresa = req.cod_empresa;
+    const userId = req.userId;
+
+    if (!Number.isInteger(creditId) || creditId <= 0) {
+      return res.status(400).json({ success: false, message: 'ID de credito invalido' });
+    }
+
+    await dbClient.query('BEGIN');
+
+    // 1. Check if loan is approved but not yet active/disbursed
+    const loanCheck = await dbClient.query(
+      `SELECT id, estado FROM op.creditos WHERE id = $1 AND cod_empresa = $2`,
+      [creditId, cod_empresa]
+    );
+
+    if (loanCheck.rowCount === 0) {
+      await dbClient.query('ROLLBACK');
+      return res.status(404).json({ success: false, message: 'Credito no encontrado' });
+    }
+
+    if (loanCheck.rows[0].estado !== 'approved' && loanCheck.rows[0].estado !== 'APROBADO') {
+      await dbClient.query('ROLLBACK');
+      return res.status(400).json({ success: false, message: 'Solo se pueden desembolsar creditos aprobados' });
+    }
+
+    // 2. Create Authorization Request
+    const authPayload = {
+      cod_empresa,
+      solicitante_id: userId,
+      tipo_accion: 'DISBURSEMENT',
+      estado: 'PENDING',
+      entidad_tipo: 'LOAN',
+      entidad_id: creditId,
+      datos_solicitud: JSON.stringify({ requestedAt: new Date(), notes: req.body.notes }),
+    };
+
+    const { sql, values } = buildInsertQuery('op', 'authorizations', authPayload);
+    const authResult = await dbClient.query(`${sql} RETURNING id`, values);
+
+    // 3. Log to SaaS Audit
+    await dbClient.query(
+      `INSERT INTO saas.audit_logs (cod_empresa, usuario_id, accion, entidad, entidad_id, detalles)
+       VALUES ($1, $2, $3, $4, $5, $6)`,
+      [cod_empresa, userId, 'DISBURSEMENT_REQUESTED', 'LOAN', creditId, JSON.stringify({ authId: authResult.rows[0].id })]
+    );
+
+    await dbClient.query('COMMIT');
+    res.json({ success: true, message: 'Solicitud de desembolso registrada para autorizacion', authId: authResult.rows[0].id });
+
+  } catch (error) {
+    await dbClient.query('ROLLBACK');
+    console.error('Error requesting disbursement:', error);
+    res.status(500).json({ success: false, message: 'Error procesando solicitud de desembolso' });
+  } finally {
+    dbClient.release();
+  }
+};
+
 export const approveLoan = async (req, res) => {
   const dbClient = await pool.connect();
   try {
@@ -975,6 +1140,13 @@ export const approveLoan = async (req, res) => {
                  ${creditColumnMap.estado} AS estado
                  ${creditColumnMap.fechaAprobacion ? `, ${creditColumnMap.fechaAprobacion} AS fecha_aprobacion` : ''}`,
       updateValues,
+    );
+
+    // Audit approved loan
+    await dbClient.query(
+      `INSERT INTO saas.audit_logs (cod_empresa, usuario_id, accion, entidad, entidad_id, detalles)
+       VALUES ($1, $2, $3, $4, $5, $6)`,
+      [req.cod_empresa, userId, 'LOAN_APPROVED', 'LOAN', creditId, JSON.stringify({ approvedAt: new Date() })]
     );
 
     await dbClient.query('COMMIT');

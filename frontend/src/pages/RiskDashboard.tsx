@@ -2,6 +2,7 @@ import AppLayout from "@/components/AppLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useQuery } from "@tanstack/react-query";
 import { AlertCircle, CheckCircle, TrendingDown } from "lucide-react";
+import { PieChart, Pie, Cell, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, Legend } from 'recharts';
 
 const RiskDashboard = () => {
   const { data: riskData, isLoading } = useQuery({
@@ -19,10 +20,18 @@ const RiskDashboard = () => {
 
   if (isLoading) return <AppLayout><div>Cargando métricas de riesgo...</div></AppLayout>;
 
+  const COLORS = ['#10b981', '#f59e0b', '#ef4444'];
+  const chartData = riskData?.portfolioHealth?.map((item: any) => ({
+    name: item.estado,
+    value: Number(item.monto_total)
+  })) || [];
+
   return (
     <AppLayout>
       <div className="space-y-6">
-        <h1 className="text-3xl font-bold tracking-tight">Dashboard de Riesgo</h1>
+        <div className="flex items-center justify-between">
+          <h1 className="text-3xl font-bold tracking-tight">Dashboard de Riesgo</h1>
+        </div>
 
         <div className="grid gap-4 md:grid-cols-3">
           {riskData?.portfolioHealth?.map((stat: any) => (
@@ -57,6 +66,61 @@ const RiskDashboard = () => {
             </p>
           </CardContent>
         </Card>
+
+        <div className="grid gap-6 md:grid-cols-2">
+          <Card>
+            <CardHeader>
+              <CardTitle>Distribución de Salud de Cartera</CardTitle>
+            </CardHeader>
+            <CardContent className="h-[300px]">
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie
+                    data={chartData}
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={60}
+                    outerRadius={80}
+                    paddingAngle={5}
+                    dataKey="value"
+                  >
+                    {chartData.map((entry: any, index: number) => (
+                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                    ))}
+                  </Pie>
+                  <Tooltip
+                    formatter={(value: any) => new Intl.NumberFormat('es-NI', { style: 'currency', currency: 'NIO' }).format(value)}
+                  />
+                  <Legend />
+                </PieChart>
+              </ResponsiveContainer>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Mora vs. Recuperación</CardTitle>
+            </CardHeader>
+            <CardContent className="h-[300px]">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart
+                  data={[
+                    { name: 'Vencida', monto: riskData?.portfolioHealth?.find((h: any) => h.estado === 'Vencida')?.monto_total || 0 },
+                    { name: 'En Riesgo', monto: riskData?.portfolioHealth?.find((h: any) => h.estado === 'En Riesgo')?.monto_total || 0 },
+                    { name: 'Recuperado', monto: riskData?.portfolioHealth?.find((h: any) => h.estado === 'Sana')?.monto_total || 0 },
+                  ]}
+                >
+                  <XAxis dataKey="name" />
+                  <YAxis />
+                  <Tooltip
+                    formatter={(value: any) => new Intl.NumberFormat('es-NI', { style: 'currency', currency: 'NIO' }).format(value)}
+                  />
+                  <Bar dataKey="monto" fill="#3b82f6" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </CardContent>
+          </Card>
+        </div>
 
         <Card>
           <CardHeader>

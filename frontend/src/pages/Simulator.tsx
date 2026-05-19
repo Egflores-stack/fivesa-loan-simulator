@@ -67,6 +67,7 @@ const Simulator = () => {
   const [amount, setAmount] = useState(50000);
   const [termMonths, setTermMonths] = useState(24);
   const [frequency, setFrequency] = useState<"SEMANAL" | "QUINCENAL" | "MENSUAL">("MENSUAL");
+  const [method, setMethod] = useState<"FRENCH" | "GERMAN">("FRENCH");
   const [annualRate, setAnnualRate] = useState(2);
   const [commissionPct, setCommissionPct] = useState(0);
   const [loanType, setLoanType] = useState("PERSONAL");
@@ -87,6 +88,7 @@ const Simulator = () => {
             tasa_interes: annualRate,
             comisionPct: commissionPct,
             firstDueDate,
+            method,
           }),
         );
       } catch {
@@ -96,7 +98,7 @@ const Simulator = () => {
       }
     }, 300);
     return () => clearTimeout(t);
-  }, [amount, termMonths, frequency, annualRate, commissionPct, firstDueDate]);
+  }, [amount, termMonths, frequency, annualRate, commissionPct, firstDueDate, method]);
 
   const launchApplication = () => {
     if (!simulation) {
@@ -280,6 +282,19 @@ const Simulator = () => {
             </div>
 
             <div className="space-y-2">
+              <Label>Metodo de Amortizacion</Label>
+              <Select value={method} onValueChange={(v) => setMethod(v as "FRENCH" | "GERMAN")}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="FRENCH">Frances (Cuota Fija)</SelectItem>
+                  <SelectItem value="GERMAN">Aleman (Capital Fijo)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
               <Label>Tasa por periodo (%)</Label>
               <Input type="number" value={annualRate} onChange={(e) => setAnnualRate(Number(e.target.value) || 0)} />
             </div>
@@ -361,7 +376,7 @@ const Simulator = () => {
                     Tasas aplicadas: Vida {simulation.rates.seguroVidaPct}% | Danos {simulation.rates.seguroDanosPct}% | Comision {simulation.rates.comisionPct}%
                   </p>
                   <p>
-                    Frecuencia: <strong>{frequency}</strong> | Numero de cuotas: <strong>{simulation.amortization.length}</strong>
+                    Frecuencia: <strong>{frequency}</strong> | Metodo: <strong>{method}</strong> | Numero de cuotas: <strong>{simulation.amortization.length}</strong>
                   </p>
                 </div>
               )}

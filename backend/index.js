@@ -29,6 +29,7 @@ import {
     getAllLoans, 
     getLoanDetails,
     registerInstallmentPayment,
+    requestLoanDisbursement,
 } from './controllers/loanController.js';
 
 import { getDashboardStats } from './controllers/dashboardController.js';
@@ -40,6 +41,7 @@ import {
 } from './controllers/documentController.js';
 
 import { getRiskMetrics } from './controllers/riskController.js';
+import { getKoraRecommendation } from './controllers/scoringController.js';
 
 dotenv.config();
 
@@ -76,11 +78,15 @@ app.delete('/api/documents/:id', verifyToken, deleteDocument);
 // Préstamos
 app.post('/api/loans/calculate', verifyToken, calculateLoan);
 app.post('/api/loans', verifyToken, createLoan);
+app.post('/api/loans/:id/disbursement-request', verifyToken, requestLoanDisbursement);
 app.put('/api/loans/:id/approve', verifyToken, approveLoan);
 app.put('/api/loans/:id/reject', verifyToken, rejectLoan);
 app.get('/api/loans', verifyToken, getAllLoans);
 app.get('/api/loans/:id', verifyToken, getLoanDetails);
 app.put('/api/loans/:id/installments/:installmentNumber/pay', verifyToken, registerInstallmentPayment);
+
+// Scoring
+app.post('/api/scoring/kora-recommendation', verifyToken, getKoraRecommendation);
 
 // Perfil de usuario
 app.get('/api/auth/profile', verifyToken, getProfile);
