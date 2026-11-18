@@ -52,7 +52,7 @@ type RequestApiShape = {
 };
 
 const API_BASE_URL =
-  import.meta.env.VITE_API_BASE_URL || "http://localhost:3001";
+  (import.meta.env.VITE_API_URL || "/api").replace(/\/+$/, "");
 
 const buildHeaders = (token: string) => ({
   "Content-Type": "application/json",
@@ -78,7 +78,7 @@ const normalizeRequest = (payload: RequestApiShape): LoanRequest => ({
 });
 
 export const fetchLoanRequests = async (token: string) => {
-  const response = await fetch(`${API_BASE_URL}/api/requests?status=pending`, {
+  const response = await fetch(`${API_BASE_URL}/requests?status=pending`, {
     headers: { Authorization: `Bearer ${token}` },
   });
 
@@ -91,7 +91,7 @@ export const fetchLoanRequests = async (token: string) => {
 };
 
 export const createLoanRequest = async (token: string, payload: RequestPayload) => {
-  const response = await fetch(`${API_BASE_URL}/api/requests`, {
+  const response = await fetch(`${API_BASE_URL}/requests`, {
     method: "POST",
     headers: buildHeaders(token),
     body: JSON.stringify(payload),
@@ -111,7 +111,7 @@ export const updateLoanRequest = async (
   id: string,
   payload: RequestPayload
 ) => {
-  const response = await fetch(`${API_BASE_URL}/api/requests/${id}`, {
+  const response = await fetch(`${API_BASE_URL}/requests/${id}`, {
     method: "PUT",
     headers: buildHeaders(token),
     body: JSON.stringify(payload),
@@ -127,7 +127,7 @@ export const updateLoanRequest = async (
 };
 
 export const deleteLoanRequest = async (token: string, id: string) => {
-  const response = await fetch(`${API_BASE_URL}/api/requests/${id}`, {
+  const response = await fetch(`${API_BASE_URL}/requests/${id}`, {
     method: "DELETE",
     headers: { Authorization: `Bearer ${token}` },
   });

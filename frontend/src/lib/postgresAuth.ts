@@ -12,7 +12,7 @@ export interface PostgresUser {
 }
 
 // Configuracion de la API
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
+const API_URL = (import.meta.env.VITE_API_URL || '/api').replace(/\/+$/, '');
 
 // Funcion para login
 export const loginWithPostgres = async (credentials: {

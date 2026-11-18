@@ -1,5 +1,5 @@
 const API_BASE_URL =
-  import.meta.env.VITE_API_BASE_URL || "http://localhost:3001";
+  (import.meta.env.VITE_API_URL || "/api").replace(/\/+$/, "");
 
 export type ConfigUser = {
   id: string;
@@ -61,7 +61,7 @@ const parseError = async (response: Response) => {
 };
 
 export const fetchUsers = async (token: string): Promise<ConfigUser[]> => {
-  const response = await fetch(`${API_BASE_URL}/api/config/users`, {
+  const response = await fetch(`${API_BASE_URL}/config/users`, {
     headers: buildHeaders(token),
   });
 
@@ -77,7 +77,7 @@ export const createUser = async (
   payload: CreateUserPayload,
   token: string,
 ): Promise<ConfigUser> => {
-  const response = await fetch(`${API_BASE_URL}/api/config/users`, {
+  const response = await fetch(`${API_BASE_URL}/config/users`, {
     method: "POST",
     headers: buildHeaders(token),
     body: JSON.stringify(payload),
@@ -96,7 +96,7 @@ export const updateUser = async (
   payload: UpdateUserPayload,
   token: string,
 ): Promise<ConfigUser> => {
-  const response = await fetch(`${API_BASE_URL}/api/config/users/${id}`, {
+  const response = await fetch(`${API_BASE_URL}/config/users/${id}`, {
     method: "PATCH",
     headers: buildHeaders(token),
     body: JSON.stringify(payload),
@@ -111,7 +111,7 @@ export const updateUser = async (
 };
 
 export const deleteUser = async (id: string, token: string): Promise<void> => {
-  const response = await fetch(`${API_BASE_URL}/api/config/users/${id}`, {
+  const response = await fetch(`${API_BASE_URL}/config/users/${id}`, {
     method: "DELETE",
     headers: buildHeaders(token),
   });
@@ -122,7 +122,7 @@ export const deleteUser = async (id: string, token: string): Promise<void> => {
 };
 
 export const fetchParameters = async (token: string): Promise<Parameters> => {
-  const response = await fetch(`${API_BASE_URL}/api/config/parameters`, {
+  const response = await fetch(`${API_BASE_URL}/config/parameters`, {
     headers: buildHeaders(token),
   });
 
@@ -144,7 +144,7 @@ export const updateParameters = async (
   payload: Parameters,
   token: string,
 ): Promise<Parameters> => {
-  const response = await fetch(`${API_BASE_URL}/api/config/parameters`, {
+  const response = await fetch(`${API_BASE_URL}/config/parameters`, {
     method: "PUT",
     headers: buildHeaders(token),
     body: JSON.stringify(payload),
@@ -168,7 +168,7 @@ export const changeOwnPassword = async (
   payload: ChangeOwnPasswordPayload,
   token: string,
 ): Promise<void> => {
-  const response = await fetch(`${API_BASE_URL}/api/auth/change-password`, {
+  const response = await fetch(`${API_BASE_URL}/auth/change-password`, {
     method: "POST",
     headers: buildHeaders(token),
     body: JSON.stringify(payload),
