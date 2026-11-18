@@ -177,7 +177,7 @@ const buildFrenchAmortization = ({
   const periodicSeguroVidaRate = (seguroVidaPct / 100) / frequencyConfig.rateDivisor;
   const periodicSeguroDanosRate = (seguroDanosPct / 100) / frequencyConfig.rateDivisor;
   const rows = [];
-  let balance = principal;
+  let balance = round2(principal);
 
   let baseInstallment = 0;
   if (totalInstallments > 0) {
@@ -190,29 +190,24 @@ const buildFrenchAmortization = ({
   }
 
   for (let installment = 1; installment <= totalInstallments; installment += 1) {
-    let interest = balance * periodicRate;
-    let capital = baseInstallment - interest;
+    const isLast = installment === totalInstallments;
+    const interest = round2(balance * periodicRate);
+    const capital = isLast ? balance : round2(baseInstallment - interest);
+    const lifeInsurance = round2(balance * periodicSeguroVidaRate);
+    const damageInsurance = round2(balance * periodicSeguroDanosRate);
+    const payment = round2(capital + interest + lifeInsurance + damageInsurance);
 
-    if (installment === totalInstallments) {
-      capital = balance;
-      interest = baseInstallment - capital;
-    }
-
-    const lifeInsurance = balance * periodicSeguroVidaRate;
-    const damageInsurance = balance * periodicSeguroDanosRate;
-    const payment = capital + interest + lifeInsurance + damageInsurance;
-
-    balance = Math.max(0, balance - capital);
+    balance = isLast ? 0 : round2(Math.max(0, balance - capital));
 
     rows.push({
       numeroCuota: installment,
       fechaVencimiento: toDateOnly(frequencyConfig.addPeriod(firstDueDate, installment - 1)),
-      capital: round2(capital),
-      interes: round2(interest),
-      seguroVida: round2(lifeInsurance),
-      seguroDanos: round2(damageInsurance),
-      cuotaTotal: round2(payment),
-      saldoCapital: round2(balance),
+      capital,
+      interes: interest,
+      seguroVida: lifeInsurance,
+      seguroDanos: damageInsurance,
+      cuotaTotal: payment,
+      saldoCapital: balance,
     });
   }
 
