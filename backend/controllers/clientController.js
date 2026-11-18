@@ -135,7 +135,6 @@ export const registerClient = async (req, res) => {
       success: false,
       code: 'INTERNAL_ERROR',
       message: 'Error registrando cliente',
-      error: error.message,
     });
   }
 };
@@ -184,7 +183,6 @@ export const checkClientExists = async (req, res) => {
       success: false,
       code: 'INTERNAL_ERROR',
       message: 'Error validando cliente',
-      error: error.message,
     });
   }
 };
@@ -245,7 +243,6 @@ export const getAllClients = async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Error obteniendo clientes',
-      error: error.message,
     });
   }
 };
@@ -289,7 +286,6 @@ export const getClientById = async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Error obteniendo cliente',
-      error: error.message,
     });
   }
 };
@@ -371,7 +367,6 @@ export const updateClient = async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Error actualizando cliente',
-      error: error.message,
     });
   }
 };

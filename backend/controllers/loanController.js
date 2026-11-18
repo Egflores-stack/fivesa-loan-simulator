@@ -515,7 +515,6 @@ export const calculateLoan = async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Error en el calculo del credito',
-      error: error.message,
     });
   }
 };
@@ -752,10 +751,11 @@ export const createLoan = async (req, res) => {
     }
 
     if (error?.message?.includes('columnas')) {
+      console.error('Error de esquema creando credito:', error);
       return res.status(500).json({
         success: false,
         code: 'INTEGRITY_ERROR',
-        message: error.message,
+        message: 'Error interno al registrar la solicitud de credito',
       });
     }
 
@@ -764,7 +764,6 @@ export const createLoan = async (req, res) => {
       success: false,
       code: 'INTERNAL_ERROR',
       message: 'Error creando la solicitud de credito',
-      error: error.message,
     });
   } finally {
     dbClient.release();
@@ -956,7 +955,6 @@ export const approveLoan = async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Error aprobando credito',
-      error: error.message,
     });
   } finally {
     dbClient.release();
@@ -1051,7 +1049,6 @@ export const rejectLoan = async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Error rechazando credito',
-      error: error.message,
     });
   } finally {
     dbClient.release();
@@ -1181,7 +1178,6 @@ export const getAllLoans = async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Error obteniendo creditos',
-      error: error.message,
     });
   }
 };
@@ -1241,7 +1237,6 @@ export const getLoanDetails = async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Error obteniendo detalle del credito',
-      error: error.message,
     });
   }
 };
@@ -1374,7 +1369,6 @@ export const registerInstallmentPayment = async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Error registrando el pago de la cuota',
-      error: error.message,
     });
   } finally {
     dbClient.release();

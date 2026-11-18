@@ -83,7 +83,6 @@ export const getDashboardStats = async (req, res) => {
     console.error('Error obteniendo dashboard stats:', error);
     res.status(500).json({
       message: 'Error obteniendo estadisticas del dashboard',
-      error: error.message,
     });
   }
 };

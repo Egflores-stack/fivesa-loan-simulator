@@ -225,7 +225,7 @@ export const fetchUsers = async (req, res) => {
     });
   } catch (error) {
     console.error('Error listando usuarios:', error);
-    res.status(500).json({ message: 'No se pudieron cargar los usuarios', error: error.message });
+    res.status(500).json({ message: 'No se pudieron cargar los usuarios' });
   }
 };
 
@@ -312,7 +312,7 @@ export const createUser = async (req, res) => {
       await dbClient.query('ROLLBACK');
     } catch {}
     console.error('Error creando usuario:', error);
-    res.status(500).json({ message: 'No se pudo crear el usuario', error: error.message });
+    res.status(500).json({ message: 'No se pudo crear el usuario' });
   } finally {
     dbClient.release();
   }
@@ -472,7 +472,7 @@ export const updateUser = async (req, res) => {
       await dbClient.query('ROLLBACK');
     } catch {}
     console.error('Error actualizando usuario:', error);
-    res.status(500).json({ message: 'No se pudo actualizar el usuario', error: error.message });
+    res.status(500).json({ message: 'No se pudo actualizar el usuario' });
   } finally {
     dbClient.release();
   }
@@ -514,7 +514,7 @@ export const deleteUser = async (req, res) => {
     res.json({ message: 'Usuario desactivado correctamente' });
   } catch (error) {
     console.error('Error desactivando usuario:', error);
-    res.status(500).json({ message: 'No se pudo eliminar el usuario', error: error.message });
+    res.status(500).json({ message: 'No se pudo eliminar el usuario' });
   }
 };
 
@@ -549,7 +549,7 @@ export const fetchParameters = async (req, res) => {
     });
   } catch (error) {
     console.error('Error consultando parametros:', error);
-    res.status(500).json({ message: 'No se pudieron cargar los parametros', error: error.message });
+    res.status(500).json({ message: 'No se pudieron cargar los parametros' });
   }
 };
 
@@ -609,7 +609,7 @@ export const updateParameters = async (req, res) => {
     } catch {}
 
     console.error('Error actualizando parametros:', error);
-    res.status(500).json({ message: 'No se pudieron actualizar los parametros', error: error.message });
+    res.status(500).json({ message: 'No se pudieron actualizar los parametros' });
   } finally {
     dbClient.release();
   }

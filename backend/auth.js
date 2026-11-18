@@ -179,7 +179,7 @@ export const register = async (req, res) => {
         });
     } catch (error) {
         console.error('Error en registro:', error);
-        res.status(500).json({ message: 'Error en el servidor', error: error.message });
+        res.status(500).json({ message: 'Error en el servidor' });
     }
 };
 
@@ -253,7 +253,7 @@ export const login = async (req, res) => {
             return res.status(403).json({ message: error.message, code: error.code });
         }
         console.error('Error en login:', error);
-        res.status(500).json({ message: 'Error en el servidor', error: error.message });
+        res.status(500).json({ message: 'Error en el servidor' });
     }
 };
 
@@ -348,7 +348,7 @@ export const changePassword = async (req, res) => {
         res.json({ message: 'Clave actualizada correctamente' });
     } catch (error) {
         console.error('Error cambiando clave:', error);
-        res.status(500).json({ message: 'Error en el servidor', error: error.message });
+        res.status(500).json({ message: 'Error en el servidor' });
     }
 };
 
