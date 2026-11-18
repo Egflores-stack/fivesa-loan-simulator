@@ -1,6 +1,9 @@
 import express from 'express';
 import dotenv from 'dotenv';
 import cors from 'cors';
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
 import { testConnection } from './db.js';
 import { changePassword, getProfile, login, register, requireAdmin, verifyToken } from './auth.js';
 import {
@@ -82,20 +85,30 @@ app.delete('/api/config/users/:id', verifyToken, deleteUser);
 app.get('/api/config/parameters', verifyToken, fetchParameters);
 app.put('/api/config/parameters', verifyToken, updateParameters);
 
-// ===== RUTA DE PRUEBA =====
-app.get('/', (req, res) => {
-    res.json({ 
-        message: 'CREDIA - Sistema de Gestión de Préstamos',
-        version: '1.0.0',
-        status: 'online',
-        endpoints: {
-            auth: ['/api/auth/register', '/api/auth/login'],
-            dashboard: ['/api/dashboard/stats'],
-            clients: ['/api/clients', '/api/clients/:id'],
-            loans: ['/api/loans', '/api/loans/:id', '/api/loans/calculate']
-        }
+// ===== SERVIR FRONTEND ESTÁTICO Y FALLBACK SPA =====
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const frontendDistPath = process.env.FRONTEND_DIST_PATH
+    ? path.resolve(process.env.FRONTEND_DIST_PATH)
+    : path.resolve(__dirname, '../frontend/dist');
+const frontendIndexPath = path.join(frontendDistPath, 'index.html');
+
+if (fs.existsSync(frontendIndexPath)) {
+    app.use(express.static(frontendDistPath));
+    app.get(/^\/(?!api(\/|$)).*/, (req, res, next) => {
+        res.sendFile(frontendIndexPath, (err) => {
+            if (err) next(err);
+        });
     });
-});
+} else {
+    app.get('/', (req, res) => {
+        res.json({
+            message: 'CREDIA - Sistema de Gestión de Préstamos',
+            version: '1.0.0',
+            status: 'online',
+        });
+    });
+}
 
 // ===== INICIAR SERVIDOR =====
 app.listen(PORT, () => {
