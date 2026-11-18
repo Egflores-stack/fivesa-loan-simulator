@@ -34,7 +34,7 @@ const SidebarContent = ({ onNavigate }: { onNavigate?: () => void }) => {
   const { logout, user } = useAuth();
   const navigate = useNavigate();
   const canAuthorize = user?.role === "Administrador" || user?.role === "Supervisor";
-  const isSuperAdmin = Boolean(user?.is_super_admin) || user?.username?.toLowerCase() === "emathews";
+  const isSuperAdmin = Boolean(user?.is_super_admin);
   const baseNavItems = isSuperAdmin
     ? navItems
     : navItems.filter((item) => item.to !== "/config");

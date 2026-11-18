@@ -113,7 +113,7 @@ const Config = () => {
     password: "",
   });
 
-  const isSuperAdmin = Boolean(user?.is_super_admin) || user?.username?.toLowerCase() === "emathews";
+  const isSuperAdmin = Boolean(user?.is_super_admin);
 
   const loadData = async () => {
     if (!token) return;
@@ -526,7 +526,7 @@ const Config = () => {
                       <Input
                         value={userForm.username}
                         onChange={(event) => handleUserFormChange("username", event.target.value)}
-                        placeholder="emathews"
+                        placeholder="admin"
                         required
                       />
                     </div>

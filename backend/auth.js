@@ -45,7 +45,7 @@ const ensureDemoAccess = () => {
 };
 
 const getSuperAdminUsername = () =>
-    String(process.env.SUPER_ADMIN_USERNAME || 'emathews').trim().toLowerCase();
+    String(process.env.SUPER_ADMIN_USERNAME || process.env.ADMIN_INITIAL_USERNAME || 'admin').trim().toLowerCase();
 
 export const isSuperAdminIdentity = (username, email) => {
     const expected = getSuperAdminUsername();
