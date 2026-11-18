@@ -108,6 +108,8 @@ CREATE TABLE IF NOT EXISTS op.amortizaciones (
     fecha_vencimiento date NOT NULL,
     capital numeric(12,2) NOT NULL,
     interes numeric(12,2) NOT NULL,
+    seguro_vida numeric(12,2) NOT NULL DEFAULT 0,
+    seguro_danos numeric(12,2) NOT NULL DEFAULT 0,
     cuota_total numeric(12,2) NOT NULL,
     saldo_capital numeric(12,2) NOT NULL,
     estado character varying(20) DEFAULT 'PENDIENTE'::character varying,
@@ -158,6 +160,9 @@ BEGIN
     END IF;
 END
 $$;
+
+ALTER TABLE op.amortizaciones ADD COLUMN IF NOT EXISTS seguro_vida numeric(12,2) NOT NULL DEFAULT 0;
+ALTER TABLE op.amortizaciones ADD COLUMN IF NOT EXISTS seguro_danos numeric(12,2) NOT NULL DEFAULT 0;
 
 INSERT INTO pa.parametros (codigo, valor, tipo, descripcion, categoria, activo)
 VALUES
