@@ -2,6 +2,14 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { query } from './db.js';
 
+export const getJwtSecret = () => {
+    const secret = String(process.env.JWT_SECRET || '').trim();
+    if (!secret) {
+        throw new Error('JWT_SECRET es obligatorio y no está configurado');
+    }
+    return secret;
+};
+
 const getDemoAccessStatus = () => {
     const enabled = String(process.env.DEMO_MODE_ENABLED || '').trim().toLowerCase() === 'true';
     const expiresAtRaw = String(process.env.DEMO_MODE_EXPIRES_AT || '').trim();
@@ -231,7 +239,7 @@ export const login = async (req, res) => {
                 username: normalizedUser.username,
                 role: normalizedUser.role,
             },
-            process.env.JWT_SECRET || 'credia_jwt_secret_key_2024_super_segura',
+            getJwtSecret(),
             { expiresIn: process.env.JWT_EXPIRES_IN || '24h' }
         );
         
@@ -361,7 +369,7 @@ export const verifyToken = async (req, res, next) => {
             return res.status(401).json({ message: 'Acceso denegado - Token no válido' });
         }
         
-        const decoded = jwt.verify(token, process.env.JWT_SECRET || 'credia_jwt_secret_key_2024_super_segura');
+        const decoded = jwt.verify(token, getJwtSecret());
         req.userId = decoded.userId;
         req.userEmail = decoded.email;
         req.userUsername = decoded.username || decoded.email?.split('@')[0];

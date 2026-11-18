@@ -5,7 +5,7 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { testConnection } from './db.js';
-import { changePassword, getProfile, login, register, requireAdmin, verifyToken } from './auth.js';
+import { changePassword, getJwtSecret, getProfile, login, register, requireAdmin, verifyToken } from './auth.js';
 import {
     createUser,
     deleteUser,
@@ -37,6 +37,13 @@ import {
 import { getDashboardStats } from './controllers/dashboardController.js';
 
 dotenv.config();
+
+try {
+    getJwtSecret();
+} catch (error) {
+    console.error(`❌ Error fatal de configuración: ${error.message}`);
+    process.exit(1);
+}
 
 const app = express();
 const PORT = process.env.PORT || 3000;
