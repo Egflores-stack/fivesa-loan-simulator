@@ -115,6 +115,10 @@ app.delete('/api/config/users/:id', verifyToken, deleteUser);
 app.get('/api/config/parameters', verifyToken, fetchParameters);
 app.put('/api/config/parameters', verifyToken, updateParameters);
 
+app.use('/api', (req, res) => {
+    res.status(404).json({ message: 'Ruta no encontrada' });
+});
+
 // ===== SERVIR FRONTEND ESTÁTICO Y FALLBACK SPA =====
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
