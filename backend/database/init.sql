@@ -77,7 +77,7 @@ CREATE TABLE IF NOT EXISTS cl.clientes (
     direccion text,
     ocupacion character varying(100),
     ingreso_mensual numeric(10,2),
-    estado_civil character varying(20),
+    estado_civil text,
     activo boolean DEFAULT true,
     creado_en timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
     asesor_id integer REFERENCES us.usuarios(id)
@@ -143,6 +143,21 @@ CREATE TRIGGER usuarios_actualizar_timestamp
     BEFORE UPDATE ON us.usuarios
     FOR EACH ROW
     EXECUTE FUNCTION public.actualizar_timestamp();
+
+DO $$
+BEGIN
+    IF EXISTS (
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_schema = 'cl'
+          AND table_name = 'clientes'
+          AND column_name = 'estado_civil'
+          AND data_type <> 'text'
+    ) THEN
+        ALTER TABLE cl.clientes ALTER COLUMN estado_civil TYPE text;
+    END IF;
+END
+$$;
 
 INSERT INTO pa.parametros (codigo, valor, tipo, descripcion, categoria, activo)
 VALUES
