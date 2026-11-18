@@ -545,7 +545,7 @@ const Config = () => {
                       <Input
                         value={userForm.company}
                         onChange={(event) => handleUserFormChange("company", event.target.value)}
-                        placeholder="Fivesa / Cliente demo"
+                        placeholder="Empresa / Cliente"
                         required
                       />
                     </div>
