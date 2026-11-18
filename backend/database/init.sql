@@ -143,3 +143,12 @@ CREATE TRIGGER usuarios_actualizar_timestamp
     BEFORE UPDATE ON us.usuarios
     FOR EACH ROW
     EXECUTE FUNCTION public.actualizar_timestamp();
+
+INSERT INTO pa.parametros (codigo, valor, tipo, descripcion, categoria, activo)
+VALUES
+    ('SEGURO_VIDA_PCT', '0', 'NUMERO', 'Porcentaje de seguro de vida sobre saldo', 'CREDITO', true),
+    ('SEGURO_DANOS_PCT', '0', 'NUMERO', 'Porcentaje de seguro de danos sobre saldo', 'CREDITO', true),
+    ('COMISION_CREDITO_PCT', '0', 'NUMERO', 'Porcentaje de comision por desembolso', 'CREDITO', true),
+    ('MORA_DIAS_VENCIDO', '0', 'NUMERO', 'Dias de mora para considerar credito vencido', 'MORA', true),
+    ('MORA_CUOTAS_VENCIDAS', '0', 'NUMERO', 'Cantidad de cuotas vencidas para estado vencido', 'MORA', true)
+ON CONFLICT (codigo) DO NOTHING;
