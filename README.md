@@ -1,73 +1,72 @@
-# Welcome to your Lovable project
+# CREDIA — Simulador y Gestión de Préstamos
 
-## Project info
+Aplicación web full-stack para simulación de créditos (sistema francés), gestión de clientes, flujo de solicitudes/aprobaciones, registro de pagos de cuotas y reportería de estados de cuenta.
 
-**URL**: https://lovable.dev/projects/585a54b5-e1d6-4b8e-b41b-16afb85179a2
+## Arquitectura
 
-## How can I edit this code?
+- **Backend**: Node.js + Express (`backend/`), conectado a PostgreSQL (`pg`). Sirve la API REST bajo `/api/*` y, en producción, los archivos estáticos compilados del frontend (`frontend/dist`) con fallback SPA.
+- **Frontend**: React + TypeScript + Vite + Tailwind CSS + shadcn/ui (`frontend/`).
 
-There are several ways of editing your application.
+## Requisitos
 
-**Use Lovable**
+- Node.js v18+ (probado con v22.17.0)
+- npm v9+
+- PostgreSQL 12+ (probado con PostgreSQL 18)
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/585a54b5-e1d6-4b8e-b41b-16afb85179a2) and start prompting.
+## Instalación
 
-Changes made via Lovable will be committed automatically to this repo.
+1. Clonar el repositorio:
+   ```bash
+   git clone <URL_DEL_REPOSITORIO>
+   cd Credia-loan-simulator
+   ```
 
-**Use your preferred IDE**
+2. Instalar dependencias:
+   ```bash
+   cd backend && npm install
+   cd ../frontend && npm install
+   ```
 
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
+3. Configurar variables de entorno:
+   - Copiar `backend/.env.example` a `backend/.env` y completar credenciales de PostgreSQL, `JWT_SECRET` (obligatorio) y `ADMIN_INITIAL_*`.
+   - Opcional en desarrollo: copiar `frontend/.env.example` a `frontend/.env` (`VITE_API_URL=/api` por defecto).
 
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
+## Base de datos y usuario administrador inicial
 
-Follow these steps:
+El esquema oficial vive en `backend/database/init.sql` (esquemas `us`, `cl`, `op`, `pa` y `public.user_admin_profiles`, junto con parámetros iniciales en `pa.parametros`).
 
-```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
+1. Crear una base de datos vacía en PostgreSQL (por ejemplo `credia_db`).
+2. Definir en `backend/.env` las variables `ADMIN_INITIAL_EMAIL`, `ADMIN_INITIAL_USERNAME` y `ADMIN_INITIAL_PASSWORD` (y `SUPER_ADMIN_USERNAME` coincidiendo con `ADMIN_INITIAL_USERNAME`).
+3. Ejecutar el inicializador idempotente desde `backend/`:
+   ```bash
+   node setupDatabase.js
+   ```
 
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
+## Arranque
 
-# Step 3: Install the necessary dependencies.
-npm i
+### Desarrollo (dos terminales)
+- Backend (`http://localhost:3000`):
+  ```bash
+  cd backend
+  npm run dev
+  ```
+- Frontend (`http://localhost:5173`, con proxy `/api` hacia `:3000`):
+  ```bash
+  cd frontend
+  npm run dev
+  ```
 
-# Step 4: Start the development server with auto-reloading and an instant preview.
-npm run dev
-```
+### Producción (un solo proceso Express sirviendo el frontend compilado)
+1. Compilar el frontend:
+   ```bash
+   cd frontend
+   npm run build
+   ```
+2. Arrancar el backend:
+   ```bash
+   cd ../backend
+   npm start
+   ```
+   Express servirá `frontend/dist` en `/` (configurable con `FRONTEND_DIST_PATH`), la API en `/api/*` y el healthcheck en `GET /api/health`.
 
-**Edit a file directly in GitHub**
-
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
-
-**Use GitHub Codespaces**
-
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
-
-## What technologies are used for this project?
-
-This project is built with:
-
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
-
-## How can I deploy this project?
-
-Simply open [Lovable](https://lovable.dev/projects/585a54b5-e1d6-4b8e-b41b-16afb85179a2) and click on Share -> Publish.
-
-## Can I connect a custom domain to my Lovable project?
-
-Yes, you can!
-
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
-
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/custom-domain#custom-domain)
+Para más detalles de operación, ver [SETUP.md](./SETUP.md).
