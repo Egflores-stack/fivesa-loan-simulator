@@ -2,7 +2,7 @@ import express from 'express';
 import dotenv from 'dotenv';
 import cors from 'cors';
 import { testConnection } from './db.js';
-import { changePassword, getProfile, login, register, verifyToken } from './auth.js';
+import { changePassword, getProfile, login, register, requireAdmin, verifyToken } from './auth.js';
 import {
     createUser,
     deleteUser,
@@ -46,7 +46,7 @@ app.use(express.json());
 testConnection();
 
 // ===== RUTAS PÚBLICAS =====
-app.post('/api/auth/register', register);
+app.post('/api/auth/register', verifyToken, requireAdmin, register);
 app.post('/api/auth/login', login);
 
 // ===== RUTAS PROTEGIDAS (requieren token) =====

@@ -92,6 +92,12 @@ export const normalizeRoleForStorage = (role, authSource) => {
 };
 
 export const isAdminRole = (role) => normalizeRoleForClient(role) === 'Administrador';
+export const requireAdmin = (req, res, next) => {
+    if (!isAdminRole(req.userRole)) {
+        return res.status(403).json({ message: 'Acceso denegado: se requiere rol Administrador' });
+    }
+    next();
+};
 export const canAuthorizeLoans = (role) => {
     const normalized = normalizeRoleForClient(role);
     return normalized === 'Administrador' || normalized === 'Supervisor';
