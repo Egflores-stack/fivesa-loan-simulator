@@ -13,8 +13,10 @@ dist-ssr
 *.local
 .env
 .env.*
+.env.docker
 !.env.example
 !**/.env.example
+!.env.docker.example
 
 # Editor directories and files
 .vscode/*

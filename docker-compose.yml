@@ -1,0 +1,61 @@
+name: ${COMPOSE_PROJECT_NAME:-credia}
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${PGDATABASE:-credia_db}
+      POSTGRES_USER: ${PGUSER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Debes definir POSTGRES_PASSWORD en el archivo de entorno}
+    volumes:
+      - credia_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER:-postgres} -d $${POSTGRES_DB:-credia_db}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - credia-net
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        VITE_API_URL: ${VITE_API_URL:-/api}
+        VITE_CONTACT_EMAIL: ${VITE_CONTACT_EMAIL:-}
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:${APP_PORT:-3100}:3000"
+    environment:
+      NODE_ENV: ${NODE_ENV:-production}
+      PORT: 3000
+      PGHOST: db
+      PGPORT: 5432
+      PGDATABASE: ${PGDATABASE:-credia_db}
+      PGUSER: ${PGUSER:-postgres}
+      PGPASSWORD: ${POSTGRES_PASSWORD:?Debes definir POSTGRES_PASSWORD en el archivo de entorno}
+      JWT_SECRET: ${JWT_SECRET:?Debes definir JWT_SECRET en el archivo de entorno}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-24h}
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3100}
+      FRONTEND_DIST_PATH: /app/frontend/dist
+      DEMO_MODE_ENABLED: ${DEMO_MODE_ENABLED:-false}
+      DEMO_MODE_EXPIRES_AT: ${DEMO_MODE_EXPIRES_AT:-2026-12-31T23:59:59-06:00}
+      SUPER_ADMIN_USERNAME: ${SUPER_ADMIN_USERNAME:-admin}
+      ADMIN_INITIAL_EMAIL: ${ADMIN_INITIAL_EMAIL:-admin@credia.local}
+      ADMIN_INITIAL_USERNAME: ${ADMIN_INITIAL_USERNAME:-admin}
+      ADMIN_INITIAL_PASSWORD: ${ADMIN_INITIAL_PASSWORD:?Debes definir ADMIN_INITIAL_PASSWORD en el archivo de entorno}
+    networks:
+      - credia-net
+
+volumes:
+  credia_pgdata:
+
+networks:
+  credia-net:
+    driver: bridge
