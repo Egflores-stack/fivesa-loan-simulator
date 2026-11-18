@@ -4,7 +4,7 @@ import cors from 'cors';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { testConnection } from './db.js';
+import { pool, query, testConnection } from './db.js';
 import { changePassword, getJwtSecret, getProfile, login, register, requireAdmin, verifyToken } from './auth.js';
 import {
     createUser,
@@ -71,6 +71,15 @@ testConnection();
 
 // ===== RUTAS PÚBLICAS =====
 app.post('/api/auth/register', verifyToken, requireAdmin, register);
+app.get('/api/health', async (req, res) => {
+    try {
+        await query('SELECT 1');
+        res.json({ status: 'ok', database: 'connected' });
+    } catch (error) {
+        console.error('Error en healthcheck:', error);
+        res.status(503).json({ status: 'error', database: 'disconnected' });
+    }
+});
 app.post('/api/auth/login', login);
 
 // ===== RUTAS PROTEGIDAS (requieren token) =====
@@ -132,8 +141,26 @@ if (fs.existsSync(frontendIndexPath)) {
 }
 
 // ===== INICIAR SERVIDOR =====
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
     console.log(`🚀 Servidor CREDIA corriendo en http://localhost:${PORT}`);
     console.log(`📊 Sistema de Gestión de Préstamos`);
     console.log(`👉 Prueba el login: POST http://localhost:${PORT}/api/auth/login`);
 });
+
+
+const gracefulShutdown = (signal) => {
+    console.log(`🛑 Señal ${signal} recibida. Cerrando servidor y pool de PostgreSQL...`);
+    server.close(async () => {
+        try {
+            await pool.end();
+            console.log('✅ Pool de PostgreSQL cerrado correctamente.');
+            process.exit(0);
+        } catch (error) {
+            console.error('❌ Error cerrando pool de PostgreSQL:', error);
+            process.exit(1);
+        }
+    });
+};
+
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
