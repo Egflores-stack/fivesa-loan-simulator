@@ -25,6 +25,8 @@ type LoanDetailRow = {
   fecha_vencimiento: string;
   capital: number;
   interes: number;
+  seguro_vida?: number;
+  seguro_danos?: number;
   cuota_total: number;
   saldo_capital: number;
   estado: string;
@@ -221,6 +223,8 @@ const Reports = () => {
         "Fecha vencimiento",
         "Capital",
         "Interes",
+        "Seguro Vida",
+        "Seguro Danos",
         "Cuota total",
         "Saldo",
         "Estado",
@@ -233,6 +237,8 @@ const Reports = () => {
           row.fecha_vencimiento ? new Date(row.fecha_vencimiento).toLocaleDateString("es-NI") : "",
           currency.format(Number(row.capital || 0)),
           currency.format(Number(row.interes || 0)),
+          currency.format(Number(row.seguro_vida || 0)),
+          currency.format(Number(row.seguro_danos || 0)),
           currency.format(Number(row.cuota_total || 0)),
           currency.format(Number(row.saldo_capital || 0)),
           normalizeInstallmentStatus(row.estado),
@@ -358,6 +364,8 @@ const Reports = () => {
             <td>${escapeHtml(row.fecha_vencimiento ? new Date(row.fecha_vencimiento).toLocaleDateString("es-NI") : "")}</td>
             <td>${escapeHtml(currency.format(Number(row.capital || 0)))}</td>
             <td>${escapeHtml(currency.format(Number(row.interes || 0)))}</td>
+            <td>${escapeHtml(currency.format(Number(row.seguro_vida || 0)))}</td>
+            <td>${escapeHtml(currency.format(Number(row.seguro_danos || 0)))}</td>
             <td>${escapeHtml(currency.format(Number(row.cuota_total || 0)))}</td>
             <td>${escapeHtml(currency.format(Number(row.saldo_capital || 0)))}</td>
             <td>${escapeHtml(normalizeInstallmentStatus(row.estado))}</td>
@@ -403,6 +411,8 @@ const Reports = () => {
                 <th>Fecha vencimiento</th>
                 <th>Capital</th>
                 <th>Interes</th>
+                <th>Seguro Vida</th>
+                <th>Seguro Danos</th>
                 <th>Cuota total</th>
                 <th>Saldo</th>
                 <th>Estado</th>
@@ -587,6 +597,8 @@ const Reports = () => {
                       <TableHead>Fecha vencimiento</TableHead>
                       <TableHead className="text-right">Capital</TableHead>
                       <TableHead className="text-right">Interes</TableHead>
+                      <TableHead className="text-right">Seguro Vida</TableHead>
+                      <TableHead className="text-right">Seguro Danos</TableHead>
                       <TableHead className="text-right">Cuota total</TableHead>
                       <TableHead className="text-right">Saldo</TableHead>
                       <TableHead>Estado</TableHead>
@@ -611,6 +623,12 @@ const Reports = () => {
                           </TableCell>
                           <TableCell className="text-right">
                             {currency.format(Number(row.interes || 0))}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            {currency.format(Number(row.seguro_vida || 0))}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            {currency.format(Number(row.seguro_danos || 0))}
                           </TableCell>
                           <TableCell className="text-right font-semibold">
                             {currency.format(Number(row.cuota_total || 0))}

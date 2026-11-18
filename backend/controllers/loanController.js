@@ -1206,11 +1206,17 @@ export const getLoanDetails = async (req, res) => {
       });
     }
 
+    const amortizationColumns = await getTableColumns(pool, 'op', 'amortizaciones');
+    const seguroVidaCol = pickExistingColumn(amortizationColumns, ['seguro_vida', 'monto_seguro_vida']);
+    const seguroDanosCol = pickExistingColumn(amortizationColumns, ['seguro_danos', 'seguro_danios', 'monto_seguro_danos', 'monto_seguro_danios']);
+
     const amortizationResult = await query(
       `SELECT numero_cuota,
               fecha_vencimiento,
               capital,
               interes,
+              ${seguroVidaCol ? `${seguroVidaCol} AS seguro_vida` : '0::numeric(12,2) AS seguro_vida'},
+              ${seguroDanosCol ? `${seguroDanosCol} AS seguro_danos` : '0::numeric(12,2) AS seguro_danos'},
               cuota_total,
               saldo_capital,
               estado,
@@ -1253,6 +1259,36 @@ export const registerInstallmentPayment = async (req, res) => {
     }
 
     await dbClient.query('BEGIN');
+
+    const creditColumns = await getTableColumns(dbClient, 'op', 'creditos');
+    const creditColumnMap = {
+      id: pickExistingColumn(creditColumns, ['id']),
+      estado: pickExistingColumn(creditColumns, ['estado', 'status']),
+    };
+    if (!creditColumnMap.id || !creditColumnMap.estado) {
+      throw new Error('La tabla op.creditos no tiene columnas minimas para validar pago');
+    }
+
+    const creditResult = await dbClient.query(
+      `SELECT ${creditColumnMap.id} AS id, ${creditColumnMap.estado} AS estado
+       FROM op.creditos
+       WHERE ${creditColumnMap.id} = $1
+       FOR UPDATE`,
+      [creditId],
+    );
+
+    if (creditResult.rowCount === 0) {
+      await dbClient.query('ROLLBACK');
+      return res.status(404).json({ success: false, message: 'Credito no encontrado' });
+    }
+
+    if (normalizeStatus(creditResult.rows[0].estado) !== 'APROBADO') {
+      await dbClient.query('ROLLBACK');
+      return res.status(400).json({
+        success: false,
+        message: 'Solo se pueden registrar pagos en creditos aprobados',
+      });
+    }
 
     const amortizationColumns = await getTableColumns(dbClient, 'op', 'amortizaciones');
     const amortizationColumnMap = {
@@ -1349,12 +1385,33 @@ export const registerInstallmentPayment = async (req, res) => {
       updateValues,
     );
 
+    const pendingResult = await dbClient.query(
+      `SELECT COUNT(*)::int AS pending_count
+       FROM op.amortizaciones
+       WHERE ${amortizationColumnMap.creditoId} = $1
+         AND UPPER(TRIM(COALESCE(${amortizationColumnMap.estado}, 'PENDIENTE'))) NOT IN ('PAGADO', 'PAID', 'CANCELADA', 'CANCELADO')`,
+      [creditId],
+    );
+
+    const pendingCount = Number(pendingResult.rows[0]?.pending_count ?? 0);
+    let loanStatus = 'APROBADO';
+    if (pendingCount === 0) {
+      await dbClient.query(
+        `UPDATE op.creditos
+         SET ${creditColumnMap.estado} = 'COMPLETADO'
+         WHERE ${creditColumnMap.id} = $1`,
+        [creditId],
+      );
+      loanStatus = 'COMPLETADO';
+    }
+
     await dbClient.query('COMMIT');
 
     res.json({
       success: true,
       message: 'Pago registrado correctamente',
       installment: result.rows[0],
+      loanStatus,
     });
   } catch (error) {
     try {
